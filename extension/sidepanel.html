@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Contentus Side Panel</title>
+    <link rel="stylesheet" href="extension.css">
+    <script src="sidepanel.js" defer></script>
+  </head>
+  <body>
+    <main class="side-shell">
+      <header class="brand-row">
+        <span class="dna-logo" aria-hidden="true">
+          <svg viewBox="0 0 48 48">
+            <path d="M14 7c10 0 20 8 20 17S24 41 14 41" />
+            <path d="M34 7c-10 0-20 8-20 17s10 17 20 17" />
+            <path d="M17 14h14M14 24h20M17 34h14" />
+          </svg>
+        </span>
+        <div>
+          <strong>Contentus Panel</strong>
+          <span>YouTube and web helper</span>
+        </div>
+      </header>
+
+      <section class="context-card">
+        <span class="eyebrow">Creator-safe analysis</span>
+        <h1 id="side-title">Analyze the current page</h1>
+        <p>Use external content as inspiration only. Rebuild ideas around your own Creator DNA, audience, and proof.</p>
+      </section>
+
+      <div class="stack" id="side-output">
+        <article>
+          <strong>Title breakdown</strong>
+          <p>Open a page and click refresh to inspect the current title, hook guess, and audience angle.</p>
+        </article>
+      </div>
+
+      <div class="button-grid">
+        <button data-action="refresh">Refresh page context</button>
+        <button data-action="save">Save as inspiration</button>
+        <button data-action="followup">Generate follow-up idea</button>
+        <button data-action="mine">Make a version for my audience</button>
+      </div>
+    </main>
+  </body>
+</html>

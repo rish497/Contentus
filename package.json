@@ -1,0 +1,21 @@
+{
+  "name": "contentus",
+  "version": "1.0.0",
+  "description": "Contentus Creator DNA AI operating system prototype with dashboard, mock APIs, and Chrome extension.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "check": "node --check server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "contentus",
+    "creator-ai",
+    "dashboard",
+    "chrome-extension"
+  ],
+  "license": "UNLICENSED"
+}

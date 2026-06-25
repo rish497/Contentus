@@ -1,0 +1,175 @@
+:root {
+  color-scheme: dark;
+  --bg: #050706;
+  --panel: #101816;
+  --soft: rgba(255, 255, 255, 0.07);
+  --line: rgba(255, 255, 255, 0.14);
+  --text: #f5fbf8;
+  --muted: #9fb1ad;
+  --cyan: #5ee8f2;
+  --green: #72e6ad;
+  --coral: #ff7567;
+  --gold: #f8c960;
+  --radius: 8px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 340px;
+  background:
+    radial-gradient(circle at top left, rgba(94, 232, 242, 0.16), transparent 44%),
+    var(--bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.popup-shell,
+.side-shell {
+  width: 360px;
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.9rem;
+}
+
+.side-shell {
+  width: min(100vw, 420px);
+  min-height: 100vh;
+}
+
+.brand-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.brand-row strong,
+.brand-row span {
+  display: block;
+}
+
+.brand-row span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.dna-logo {
+  display: grid;
+  width: 2.4rem;
+  height: 2.4rem;
+  place-items: center;
+  border: 1px solid rgba(94, 232, 242, 0.48);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.dna-logo svg {
+  width: 72%;
+  height: 72%;
+}
+
+.dna-logo path {
+  fill: none;
+  stroke: var(--cyan);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.context-card,
+.result-card,
+.stack article {
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(16, 24, 22, 0.92);
+}
+
+.eyebrow {
+  color: var(--cyan);
+  font-size: 0.7rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 1.2rem;
+  line-height: 1.08;
+}
+
+p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+label {
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 0.86rem;
+}
+
+textarea {
+  width: 100%;
+  padding: 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  color: var(--text);
+  resize: vertical;
+  outline: none;
+}
+
+textarea:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 3px rgba(94, 232, 242, 0.12);
+}
+
+.button-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+button {
+  min-height: 2.55rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--soft);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 850;
+}
+
+button:hover,
+button:focus-visible {
+  border-color: rgba(94, 232, 242, 0.55);
+  background: rgba(94, 232, 242, 0.12);
+  outline: none;
+}
+
+.result-card {
+  min-height: 5.6rem;
+  color: var(--muted);
+}
+
+.stack {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.stack strong {
+  display: block;
+  margin-bottom: 0.3rem;
+}
