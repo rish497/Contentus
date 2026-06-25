@@ -10,5 +10,7 @@ services:
         value: production
       - key: CONTENTUS_MODE
         value: production
+      - key: GOOGLE_REDIRECT_URI
+        value: https://contentus.onrender.com/api/google/oauth/callback
       - key: SKIP_INSTALL_DEPS
         value: true

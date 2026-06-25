@@ -3,6 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import crypto from "node:crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadEnvFile();
@@ -13,10 +14,12 @@ const SUPABASE_ANON_KEY = trimEnv("SUPABASE_ANON_KEY");
 const GEMINI_API_KEY = trimEnv("GEMINI_API_KEY");
 const GOOGLE_CLIENT_ID = trimEnv("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = trimEnv("GOOGLE_CLIENT_SECRET");
+const GOOGLE_REDIRECT_URI = trimEnv("GOOGLE_REDIRECT_URI");
 const YOUTUBE_DATA_API_KEY = trimEnv("YOUTUBE_DATA_API_KEY");
 const FIREBASE_API_KEY = trimEnv("FIREBASE_API_KEY");
 const SESSION_SECRET = trimEnv("SESSION_SECRET");
 const SUPABASE_AUTH_URL = SUPABASE_URL ? `${SUPABASE_URL}/auth/v1` : "";
+const googleOAuthStates = new Map();
 
 const mimeTypes = {
   ".html": "text/html; charset=utf-8",
@@ -239,7 +242,30 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/google/oauth/start") {
+    const result = await googleOAuthStart(request, url);
+    sendJson(response, result.status, result.payload);
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/google/oauth/callback") {
+    await googleOAuthCallback(request, response, url);
+    return;
+  }
+
   const body = await readJsonBody(request);
+
+  if (request.method === "GET" && url.pathname === "/api/calendar/events") {
+    const result = await googleCalendarEvents(request, url);
+    sendJson(response, result.status, result.payload);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/calendar/events") {
+    const result = await googleCalendarCreateEvent(request, body);
+    sendJson(response, result.status, result.payload);
+    return;
+  }
 
   if (request.method === "POST" && url.pathname === "/api/youtube/channel") {
     const result = await fetchYouTubeChannel(body.input);
@@ -249,6 +275,12 @@ async function handleApi(request, response, url) {
 
   if (request.method === "POST" && url.pathname === "/api/youtube/comments") {
     const result = await fetchYouTubeComments(body.videoId);
+    sendJson(response, result.status, result.payload);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/youtube/reply") {
+    const result = await postYouTubeReply(request, body);
     sendJson(response, result.status, result.payload);
     return;
   }
@@ -310,6 +342,350 @@ async function handleApi(request, response, url) {
   }
 
   sendJson(response, 404, { error: "API route not found", path: url.pathname });
+}
+
+async function googleOAuthStart(request, url) {
+  const missing = requireGoogleOAuthConfig(request);
+  if (missing) return missing;
+  const token = bearerToken(request);
+  const user = await supabaseUser(token);
+  if (user.status >= 400) return user;
+
+  const scopeKey = url.searchParams.get("scope") || "all";
+  const scopes = googleScopes(scopeKey);
+  const state = crypto.randomBytes(24).toString("hex");
+  googleOAuthStates.set(state, {
+    token,
+    scopeKey,
+    createdAt: Date.now(),
+  });
+
+  const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+  authUrl.searchParams.set("client_id", GOOGLE_CLIENT_ID);
+  authUrl.searchParams.set("redirect_uri", googleRedirectUri(request));
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("scope", scopes.join(" "));
+  authUrl.searchParams.set("access_type", "offline");
+  authUrl.searchParams.set("include_granted_scopes", "true");
+  authUrl.searchParams.set("prompt", "consent");
+  authUrl.searchParams.set("state", state);
+  return {
+    status: 200,
+    payload: {
+      authUrl: authUrl.toString(),
+      scopes,
+      message: configured(SESSION_SECRET)
+        ? "Google OAuth ready."
+        : "Google OAuth ready. Add SESSION_SECRET to keep refresh access after the token expires.",
+    },
+  };
+}
+
+async function googleOAuthCallback(request, response, url) {
+  const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  const entry = googleOAuthStates.get(state);
+  googleOAuthStates.delete(state);
+
+  if (!code || !entry || Date.now() - entry.createdAt > 10 * 60 * 1000) {
+    redirectHtml(response, "/#/app/calendar", "Google connection expired. Return to Contentus and try again.");
+    return;
+  }
+
+  const tokenResult = await exchangeGoogleCode(code, googleRedirectUri(request));
+  if (!tokenResult.ok) {
+    redirectHtml(response, "/#/app/calendar", tokenResult.message);
+    return;
+  }
+
+  const existing = await supabaseUserRaw(entry.token);
+  if (existing.status >= 400) {
+    redirectHtml(response, "/#/login", "Sign in to Contentus again before connecting Google.");
+    return;
+  }
+
+  const stored = buildStoredGoogleAuth(existing.payload.user_metadata?.google_oauth, tokenResult.payload, entry.scopeKey);
+  const update = await supabaseUpdateUserMetadata(entry.token, { google_oauth: stored });
+  if (update.status >= 400) {
+    redirectHtml(response, "/#/app/calendar", update.payload.message || "Could not save Google connection.");
+    return;
+  }
+
+  const route = entry.scopeKey === "youtube" ? "/#/app/community" : "/#/app/calendar";
+  redirectHtml(response, route, "Google connected. Return to Contentus.");
+}
+
+async function googleCalendarEvents(request, url) {
+  const auth = await googleAccessForRequest(request, "calendar");
+  if (auth.status >= 400) return auth;
+  const timeMin = url.searchParams.get("timeMin") || new Date().toISOString();
+  const timeMax = url.searchParams.get("timeMax") || new Date(Date.now() + 31 * 86400000).toISOString();
+  const result = await googleApiFetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", auth.accessToken, {
+    timeMin,
+    timeMax,
+    singleEvents: "true",
+    orderBy: "startTime",
+    maxResults: "250",
+  });
+  if (!result.ok) return { status: result.status, payload: result.payload };
+  return {
+    status: 200,
+    payload: {
+      google: googlePublicState(auth.stored),
+      events: normalizeArray(result.payload.items).map(calendarEventFromGoogle),
+    },
+  };
+}
+
+async function googleCalendarCreateEvent(request, body = {}) {
+  const auth = await googleAccessForRequest(request, "calendar");
+  if (auth.status >= 400) return auth;
+  if (!body.title || !body.date) {
+    return { status: 400, payload: { error: "Title and date are required." } };
+  }
+  const start = `${body.date}T${body.startTime || "10:00"}:00`;
+  const end = `${body.date}T${body.endTime || "11:00"}:00`;
+  const result = await googleApiFetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", auth.accessToken, {}, {
+    method: "POST",
+    body: {
+      summary: body.title,
+      description: [body.platform, body.notes].filter(Boolean).join("\n\n"),
+      start: { dateTime: start, timeZone: "Asia/Kolkata" },
+      end: { dateTime: end, timeZone: "Asia/Kolkata" },
+    },
+  });
+  if (!result.ok) return { status: result.status, payload: result.payload };
+  return { status: 201, payload: { event: calendarEventFromGoogle(result.payload), google: googlePublicState(auth.stored) } };
+}
+
+async function postYouTubeReply(request, body = {}) {
+  const auth = await googleAccessForRequest(request, "youtube");
+  if (auth.status >= 400) return auth;
+  if (!body.parentId || !body.text) {
+    return { status: 400, payload: { error: "parentId and text are required." } };
+  }
+  const result = await googleApiFetch("https://www.googleapis.com/youtube/v3/comments", auth.accessToken, { part: "snippet" }, {
+    method: "POST",
+    body: {
+      snippet: {
+        parentId: body.parentId,
+        textOriginal: body.text,
+      },
+    },
+  });
+  if (!result.ok) return { status: result.status, payload: result.payload };
+  return { status: 201, payload: { ok: true, replyId: result.payload.id, google: googlePublicState(auth.stored) } };
+}
+
+async function exchangeGoogleCode(code, redirectUri) {
+  try {
+    const result = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+    const payload = await result.json();
+    if (!result.ok) return { ok: false, message: payload.error_description || payload.error || "Google token exchange failed." };
+    return { ok: true, payload };
+  } catch (error) {
+    return { ok: false, message: error.message };
+  }
+}
+
+async function googleAccessForRequest(request, capability) {
+  const token = bearerToken(request);
+  const user = await supabaseUserRaw(token);
+  if (user.status >= 400) return user;
+  let stored = user.payload.user_metadata?.google_oauth;
+  if (!stored || !stored.capabilities?.[capability]) {
+    return {
+      status: 401,
+      payload: {
+        error: "Google not connected",
+        message: capability === "calendar"
+          ? "Connect Google Calendar before loading or creating calendar events."
+          : "Connect Google with YouTube posting permission before posting replies.",
+      },
+    };
+  }
+  if (stored.expires_at && stored.expires_at < Date.now() + 60000) {
+    const refreshed = await refreshGoogleToken(stored);
+    if (!refreshed.ok) {
+      return {
+        status: 401,
+        payload: {
+          error: "Reconnect Google",
+          message: "Reconnect Google. Add SESSION_SECRET to keep refresh access after the token expires.",
+        },
+      };
+    }
+    stored = { ...stored, ...refreshed.stored };
+    await supabaseUpdateUserMetadata(token, { google_oauth: stored });
+  }
+  return { status: 200, accessToken: stored.access_token, stored };
+}
+
+async function refreshGoogleToken(stored = {}) {
+  const refreshToken = decryptGoogleRefreshToken(stored.refresh_token_enc);
+  if (!refreshToken) return { ok: false };
+  try {
+    const result = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }),
+    });
+    const payload = await result.json();
+    if (!result.ok) return { ok: false };
+    return {
+      ok: true,
+      stored: {
+        access_token: payload.access_token,
+        expires_at: Date.now() + Number(payload.expires_in || 3600) * 1000,
+      },
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
+async function googleApiFetch(baseUrl, accessToken, params = {}, options = {}) {
+  const url = new URL(baseUrl);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, value);
+  });
+  const result = await fetch(url, {
+    method: options.method || "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const text = await result.text();
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = { raw: text };
+  }
+  if (!result.ok) {
+    return {
+      ok: false,
+      status: result.status,
+      payload: {
+        error: payload.error?.message || payload.error || "Google API request failed.",
+        message: payload.error?.message || payload.error_description || "Google API request failed.",
+        details: payload,
+      },
+    };
+  }
+  return { ok: true, status: result.status, payload };
+}
+
+function buildStoredGoogleAuth(existing = {}, tokenPayload = {}, scopeKey = "all") {
+  const capabilities = { ...(existing?.capabilities || {}) };
+  if (scopeKey === "calendar" || scopeKey === "all") capabilities.calendar = true;
+  if (scopeKey === "youtube" || scopeKey === "all") capabilities.youtube = true;
+  const stored = {
+    ...existing,
+    access_token: tokenPayload.access_token,
+    expires_at: Date.now() + Number(tokenPayload.expires_in || 3600) * 1000,
+    capabilities,
+    saved_at: new Date().toISOString(),
+    reconnect_required: !configured(SESSION_SECRET),
+  };
+  if (tokenPayload.refresh_token && configured(SESSION_SECRET)) {
+    stored.refresh_token_enc = encryptGoogleRefreshToken(tokenPayload.refresh_token);
+    stored.reconnect_required = false;
+  }
+  return stored;
+}
+
+function googleScopes(scopeKey = "all") {
+  const scopes = new Set(["openid", "email", "profile"]);
+  if (scopeKey === "calendar" || scopeKey === "all") scopes.add("https://www.googleapis.com/auth/calendar.events");
+  if (scopeKey === "youtube" || scopeKey === "all") scopes.add("https://www.googleapis.com/auth/youtube.force-ssl");
+  return [...scopes];
+}
+
+function googleRedirectUri(request) {
+  return configured(GOOGLE_REDIRECT_URI)
+    ? GOOGLE_REDIRECT_URI
+    : `${request.headers["x-forwarded-proto"] || "http"}://${request.headers.host}/api/google/oauth/callback`;
+}
+
+function requireGoogleOAuthConfig(request) {
+  if (integrationStatus().googleOAuth) return null;
+  return {
+    status: 501,
+    payload: {
+      error: "Google OAuth is not configured",
+      message: "Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, and SESSION_SECRET in .env and Render.",
+    },
+  };
+}
+
+function encryptGoogleRefreshToken(value) {
+  if (!configured(SESSION_SECRET) || !value) return "";
+  const key = crypto.createHash("sha256").update(SESSION_SECRET).digest();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString("base64")}.${tag.toString("base64")}.${encrypted.toString("base64")}`;
+}
+
+function decryptGoogleRefreshToken(value = "") {
+  if (!configured(SESSION_SECRET) || !value) return "";
+  try {
+    const [ivText, tagText, encryptedText] = value.split(".");
+    const key = crypto.createHash("sha256").update(SESSION_SECRET).digest();
+    const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64"));
+    decipher.setAuthTag(Buffer.from(tagText, "base64"));
+    return Buffer.concat([decipher.update(Buffer.from(encryptedText, "base64")), decipher.final()]).toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+function googlePublicState(stored = {}) {
+  return {
+    calendar: Boolean(stored.capabilities?.calendar),
+    youtubePosting: Boolean(stored.capabilities?.youtube),
+    reconnectRequired: Boolean(stored.reconnect_required),
+    expiresAt: stored.expires_at,
+  };
+}
+
+function calendarEventFromGoogle(event = {}) {
+  const startValue = event.start?.dateTime || event.start?.date || "";
+  const endValue = event.end?.dateTime || event.end?.date || "";
+  return {
+    id: event.id,
+    googleEventId: event.id,
+    title: event.summary || "Untitled event",
+    date: startValue.slice(0, 10),
+    time: startValue.includes("T") ? `${startValue.slice(11, 16)}${endValue ? `-${endValue.slice(11, 16)}` : ""}` : "All day",
+    start: startValue,
+    end: endValue,
+    source: "google",
+  };
+}
+
+function redirectHtml(response, route, message) {
+  response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  response.end(`<!doctype html><meta charset="utf-8"><script>localStorage.setItem("contentus-google-message", ${JSON.stringify(message)}); location.replace(${JSON.stringify(route)});</script><p>${message}</p>`);
 }
 
 async function generateCreatorDna(body = {}) {
@@ -663,7 +1039,18 @@ async function fetchYouTubeComments(videoId = "") {
     });
     return { status: 200, payload: { comments } };
   } catch (error) {
-    return { status: 502, payload: { error: "Could not fetch comments", message: error.message } };
+    const message = stripHtml(error.message || "");
+    if (/disabled comments|comments.*disabled|has disabled comments/i.test(message)) {
+      return {
+        status: 409,
+        payload: {
+          error: "Comments disabled",
+          commentsDisabled: true,
+          message: "Comments are disabled for this video. Choose another video.",
+        },
+      };
+    }
+    return { status: 502, payload: { error: "Could not fetch comments", message } };
   }
 }
 
@@ -1069,6 +1456,10 @@ function fallbackReply(text = "") {
   return "Appreciate you watching. I am noting this for the next version.";
 }
 
+function stripHtml(value = "") {
+  return String(value).replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+}
+
 function bearerToken(request) {
   const header = request.headers.authorization || "";
   return header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
@@ -1200,6 +1591,14 @@ async function supabaseUser(token) {
   return result;
 }
 
+async function supabaseUserRaw(token) {
+  if (!token) return { status: 401, payload: { error: "Missing access token." } };
+  return supabaseFetch("/user", {
+    method: "GET",
+    headers: authHeaders(token),
+  });
+}
+
 async function supabaseUpdateUserState(token, contentusState) {
   if (!token) return { status: 401, payload: { error: "Missing access token." } };
   if (!contentusState) return { status: 400, payload: { error: "contentusState is required." } };
@@ -1228,7 +1627,22 @@ async function supabaseUpdateUserState(token, contentusState) {
   return result;
 }
 
+async function supabaseUpdateUserMetadata(token, data = {}) {
+  if (!token) return { status: 401, payload: { error: "Missing access token." } };
+  const result = await supabaseFetch("/user", {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify({ data }),
+  });
+  if (result.status < 400) {
+    return { status: result.status, payload: { ok: true, user: sanitizeUser(result.payload) } };
+  }
+  return result;
+}
+
 function sanitizeUser(user = {}) {
+  const metadata = { ...(user.user_metadata || {}) };
+  if (metadata.google_oauth) metadata.google_oauth = googlePublicState(metadata.google_oauth);
   return {
     id: user.id,
     email: user.email,
@@ -1237,7 +1651,7 @@ function sanitizeUser(user = {}) {
     created_at: user.created_at,
     confirmed_at: user.confirmed_at,
     last_sign_in_at: user.last_sign_in_at,
-    user_metadata: user.user_metadata || {},
+    user_metadata: metadata,
   };
 }
 

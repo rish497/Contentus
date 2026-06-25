@@ -61,8 +61,23 @@ Use products with free API-key access or free tiers:
 - Google Gemini API for AI generation
 - YouTube Data API for public channel/video/comment data
 - Google OAuth credentials for future private YouTube Analytics access
+- Google OAuth redirect URI for Calendar read/write and approved YouTube reply posting
 - Firebase as an optional auth/database alternative
 
 Never expose Supabase secret/service-role keys in frontend code. Use the publishable/anon key only with Row Level Security configured.
 
 For Render deployment, add the same environment variables in the Render Dashboard because local `.env` files are not uploaded as production secrets.
+
+For Google OAuth, add this authorized redirect URI in Google Cloud:
+
+```text
+http://localhost:3000/api/google/oauth/callback
+```
+
+For Render, replace the domain with your deployed Render URL:
+
+```text
+https://your-render-service.onrender.com/api/google/oauth/callback
+```
+
+Set `SESSION_SECRET` to a long random value so Google refresh tokens can be encrypted and reused.

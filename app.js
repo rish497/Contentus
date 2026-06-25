@@ -32,6 +32,12 @@ const defaultState = {
   youtube: null,
   comments: [],
   growthInsights: [],
+  google: null,
+  googleCalendarEvents: [],
+  selectedVideoId: "",
+  tutorialCompleted: false,
+  tutorialStep: 0,
+  calendarViewDate: "",
 };
 
 const analytics = {
@@ -156,6 +162,12 @@ function mergeState(base, saved) {
     youtube: isLegacyDemo ? null : (saved.youtube || null),
     comments: isLegacyDemo ? [] : (Array.isArray(saved.comments) ? saved.comments : cleanBase.comments),
     growthInsights: isLegacyDemo ? [] : (Array.isArray(saved.growthInsights) ? saved.growthInsights : cleanBase.growthInsights),
+    google: isLegacyDemo ? null : (saved.google || null),
+    googleCalendarEvents: isLegacyDemo ? [] : (Array.isArray(saved.googleCalendarEvents) ? saved.googleCalendarEvents : cleanBase.googleCalendarEvents),
+    selectedVideoId: isLegacyDemo ? "" : (saved.selectedVideoId || ""),
+    tutorialCompleted: isLegacyDemo ? false : Boolean(saved.tutorialCompleted),
+    tutorialStep: isLegacyDemo ? 0 : Number(saved.tutorialStep || 0),
+    calendarViewDate: isLegacyDemo ? "" : (saved.calendarViewDate || ""),
   };
 
   if (isLegacyDemo) {
@@ -276,6 +288,7 @@ async function initAuth() {
     const user = result.data.user;
     if (user?.email) state.creator.email = user.email;
     if (user?.user_metadata?.name) state.creator.creatorName = user.user_metadata.name;
+    if (user?.user_metadata?.google_oauth) state.google = googlePublicClientState(user.user_metadata.google_oauth);
     saveStateLocalOnly();
   } else {
     saveSession(null);
@@ -474,6 +487,7 @@ function render() {
 
   app.className = "app-root";
   app.innerHTML = appShellV4(activeRoute);
+  requestAnimationFrame(positionTutorialSpotlight);
 }
 
 function landingView() {
@@ -719,7 +733,7 @@ function appShell(route) {
     <section class="app-shell">
       <aside class="sidebar">
         <a href="#/app/dashboard">${dnaLogo()}</a>
-        <nav class="sidebar-nav" aria-label="App navigation">
+        <nav class="sidebar-nav" aria-label="App navigation" data-tour-target="sidebar">
           ${navLink("/app/dashboard", "dashboard", "Dashboard")}
           ${navLink("/app/dna", "dna", "Creator DNA")}
           ${navLink("/app/ideas", "spark", "Idea Engine")}
@@ -1514,6 +1528,7 @@ async function handleLogin(button) {
       state = mergeState(defaultState, saved.data.contentusState);
       state.authed = true;
       state.creator.email = result.data.user?.email || credentials.email;
+      if (saved.data.user?.user_metadata?.google_oauth) state.google = googlePublicClientState(saved.data.user.user_metadata.google_oauth);
     } else {
       await saveRemoteState();
     }
@@ -2079,6 +2094,12 @@ function mergeStateV4(base, saved = {}) {
     youtube: isLegacyDemo ? null : (saved.youtube || null),
     comments: isLegacyDemo ? [] : normalizeList(saved.comments),
     growthInsights: isLegacyDemo ? [] : normalizeList(saved.growthInsights),
+    google: isLegacyDemo ? null : (saved.google || null),
+    googleCalendarEvents: isLegacyDemo ? [] : normalizeList(saved.googleCalendarEvents),
+    selectedVideoId: isLegacyDemo ? "" : (saved.selectedVideoId || ""),
+    tutorialCompleted: isLegacyDemo ? false : Boolean(saved.tutorialCompleted),
+    tutorialStep: isLegacyDemo ? 0 : Number(saved.tutorialStep || 0),
+    calendarViewDate: isLegacyDemo ? "" : (saved.calendarViewDate || ""),
   };
 
   if (isLegacyDemo) {
@@ -2369,7 +2390,7 @@ function appShellV4(route) {
     <section class="app-shell app-v4">
       <aside class="sidebar sidebar-v4">
         <a href="#/app/dashboard">${dnaLogo()}</a>
-        <nav class="sidebar-nav" aria-label="App navigation">
+        <nav class="sidebar-nav" aria-label="App navigation" data-tour-target="sidebar">
           ${navLink("/app/dashboard", "dashboard", "Dashboard")}
           ${navLink("/app/dna", "dna", "Creator DNA")}
           ${navLink("/app/ideas", "spark", "Idea Engine")}
@@ -2401,10 +2422,12 @@ function appShellV4(route) {
           </div>
           <div class="topbar-actions">
             <span class="badge ${state.authed ? "good" : "warn"}">${state.authed ? "Sync ready" : "Local only"}</span>
+            <button class="button secondary help-button" type="button" data-action="v4-restart-tutorial">Help</button>
             <a class="button primary" href="#/app/ideas">New idea</a>
           </div>
         </header>
-        <div class="app-content">${page.html}</div>
+        <div class="app-content" data-tour-target="page">${page.html}</div>
+        ${tutorialOverlayV4()}
       </section>
     </section>
   `;
@@ -2427,6 +2450,56 @@ function pageForRouteV4(route) {
   return pages[route] || pages["/app/dashboard"];
 }
 
+function tutorialOverlayV4() {
+  if (!state.authed || state.tutorialCompleted) return "";
+  const steps = tutorialStepsV4();
+  const index = Math.min(Math.max(Number(state.tutorialStep || 0), 0), steps.length - 1);
+  const step = steps[index];
+  return `
+    <div class="tutorial-overlay" role="dialog" aria-modal="true" aria-label="Contentus quick tour">
+      <div class="tutorial-scrim"></div>
+      <div class="tutorial-spotlight" aria-hidden="true"></div>
+      <div class="tutorial-card" data-target="${escapeHtml(step.target)}">
+        <span class="section-kicker">Quick tour ${index + 1}/${steps.length}</span>
+        <h3>${escapeHtml(step.title)}</h3>
+        <p>${escapeHtml(step.text)}</p>
+        <div class="tutorial-actions">
+          <button class="button secondary" type="button" data-action="v4-tutorial-skip">${index === steps.length - 1 ? "Done" : "Skip"}</button>
+          <button class="button secondary" type="button" data-action="v4-tutorial-back" ${index === 0 ? "disabled" : ""}>Back</button>
+          <button class="button primary" type="button" data-action="v4-tutorial-next">${index === steps.length - 1 ? "Finish" : "Next"}</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function tutorialStepsV4() {
+  return [
+    { target: "sidebar", title: "Use the sidebar as your studio map", text: "Move between Creator DNA, ideas, scripts, thumbnails, YouTube growth, community, and calendar from here." },
+    { target: "dashboard-overview", title: "Dashboard shows only your data", text: "New accounts start blank. Metrics fill from your Creator DNA, generated work, linked YouTube channel, and calendar." },
+    { target: "page", title: "Start with Creator DNA", text: "Train Contentus with writing, audio, video, or YouTube context so outputs sound like you." },
+    { target: "page", title: "Generate and refine content", text: "Use Idea Engine and Script Builder to move from a topic to a publish-ready draft." },
+    { target: "youtube-growth", title: "Analyze YouTube performance", text: "Link a channel, choose a video, load comments, and turn audience signals into next posts." },
+    { target: "calendar", title: "Plan the work", text: "Use the calendar to schedule content, connect Google Calendar, and sync events when Google is connected." },
+  ];
+}
+
+function positionTutorialSpotlight() {
+  const overlay = document.querySelector(".tutorial-overlay");
+  const spotlight = document.querySelector(".tutorial-spotlight");
+  const card = document.querySelector(".tutorial-card");
+  if (!overlay || !spotlight || !card) return;
+  const targetName = card.dataset.target;
+  const target = document.querySelector(`[data-tour-target="${CSS.escape(targetName)}"]`) || document.querySelector(".app-content");
+  if (!target) return;
+  const rect = target.getBoundingClientRect();
+  const pad = targetName === "sidebar" ? 8 : 14;
+  spotlight.style.setProperty("--spot-x", `${Math.max(8, rect.left - pad)}px`);
+  spotlight.style.setProperty("--spot-y", `${Math.max(8, rect.top - pad)}px`);
+  spotlight.style.setProperty("--spot-w", `${Math.min(window.innerWidth - 16, rect.width + pad * 2)}px`);
+  spotlight.style.setProperty("--spot-h", `${Math.min(window.innerHeight - 16, rect.height + pad * 2)}px`);
+}
+
 function dashboardPageV4() {
   const dna = safeDna();
   const avgAuth = averageScore(state.scripts.map((script) => script.authenticityScore));
@@ -2434,7 +2507,7 @@ function dashboardPageV4() {
   const topVideo = bestVideo();
   return `
     <section class="page page-v4">
-      <div class="page-hero compact-hero">
+      <div class="page-hero compact-hero dashboard-hero-v5" data-tour-target="dashboard-overview">
         <div>
           <p class="section-kicker">Welcome${state.creator.creatorName ? `, ${escapeHtml(state.creator.creatorName)}` : ""}</p>
           <h2>${hasData ? "Your creator workspace is live." : "Start with your real creator data."}</h2>
@@ -2446,7 +2519,7 @@ function dashboardPageV4() {
         </div>
       </div>
 
-      <div class="metric-grid metric-grid-v4">
+      <div class="metric-grid metric-grid-v4 dashboard-metrics-v5">
         ${metric("Creator DNA", state.dna ? `${dna.score}%` : "Not built", state.dna ? "Voice profile saved" : "Add samples", state.dna ? "good" : "warn")}
         ${metric("Avg authenticity", avgAuth ? `${avgAuth}%` : "No scripts", avgAuth ? "From saved scripts" : "Generate a script", avgAuth ? "good" : "warn")}
         ${metric("Ideas", String(state.ideas.length), state.ideas.length ? "Saved in workspace" : "No ideas yet", state.ideas.length ? "good" : "warn")}
@@ -2459,7 +2532,7 @@ function dashboardPageV4() {
             <div class="card-topline">
               <div><span class="section-kicker">Next action</span><h3>Keep the loop moving</h3></div>
             </div>
-            <div class="quick-actions slim-actions">
+            <div class="quick-actions slim-actions dashboard-action-grid">
               ${quickAction("/app/ideas", "Generate idea", "Start from a topic")}
               ${quickAction("/app/scripts", "Write script", "Turn selected idea into a script")}
               ${quickAction("/app/thumbnail", "Design thumbnail", "Create a visual direction")}
@@ -2553,7 +2626,7 @@ function dnaPageV4() {
             <div class="form-field full">
               <label>Tone signals</label>
               <div class="toggle-group">
-                ${["funny", "educational", "cinematic", "emotional", "sarcastic", "professional", "chaotic", "motivational", "calm", "bold"].map((tone) => `<button class="pill-button ${state.creator.tone.includes(tone) ? "active" : ""}" type="button" data-action="toggle-pill">${tone}</button>`).join("")}
+                ${["funny", "educational", "cinematic", "emotional", "sarcastic", "professional", "chaotic", "motivational", "calm", "bold"].map((tone) => `<button class="pill-button ${(state.creator.tone || []).includes(tone) ? "active" : ""}" type="button" data-action="toggle-pill">${tone}</button>`).join("")}
               </div>
             </div>
             ${textareaV4("samples", "Writing samples or transcript", "", "Paste captions, scripts, posts, transcripts, or rough notes.", "full")}
@@ -2866,13 +2939,14 @@ function authOutputV4(result) {
 function youtubeGrowthPageV4() {
   const yt = state.youtube;
   const videos = normalizeList(yt?.videos || yt?.recentVideos);
+  const selected = selectedVideo();
   return `
     <section class="page page-v4">
-      <div class="page-hero compact-hero">
+      <div class="page-hero compact-hero youtube-hero-v5" data-tour-target="youtube-growth">
         <div>
           <p class="section-kicker">YouTube + Growth</p>
           <h2>${yt?.channel?.title || "Link your public channel"}</h2>
-          <p class="muted">Use a channel URL, @handle, or video URL. Public stats and comments work with your YouTube Data API key. Private Analytics like retention/CTR require Google OAuth keys.</p>
+          <p class="muted">Paste a public channel, handle, or video URL. Contentus reads public performance, helps choose a video, and turns comments into creator-safe next actions.</p>
         </div>
         <form class="inline-connect" id="youtube-form">
           <input id="youtube-input" placeholder="@handle, channel URL, or video URL">
@@ -2881,25 +2955,40 @@ function youtubeGrowthPageV4() {
       </div>
 
       ${yt ? `
-        <div class="metric-grid metric-grid-v4">
-          ${metric("Subscribers", formatNumber(yt.channel?.subscribers), "Public channel stat", "good")}
-          ${metric("Total views", formatNumber(yt.channel?.views), "Public channel stat", "good")}
-          ${metric("Videos fetched", String(videos.length), "Recent uploads", "good")}
-          ${metric("Comments loaded", String(state.comments.length), "From selected videos", state.comments.length ? "good" : "warn")}
-        </div>
-        <div class="dashboard-grid dashboard-grid-v4">
-          <article class="dashboard-card span-2">
-            <div class="card-topline"><div><span class="section-kicker">Recent videos</span><h3>Public performance</h3></div></div>
-            ${videos.length ? barChart(videoChartValues(videos), videos.map((_, index) => index + 1)) : emptyMini("No recent public videos found.")}
-            <div class="video-table">
-              ${videos.map((video) => videoRowV4(video)).join("")}
+        <article class="dashboard-card youtube-channel-card">
+          ${yt.channel?.thumbnail ? `<img class="channel-avatar" src="${escapeHtml(yt.channel.thumbnail)}" alt="">` : `<span class="channel-avatar placeholder"></span>`}
+          <div>
+            <span class="section-kicker">Connected channel</span>
+            <h3>${escapeHtml(yt.channel?.title || "YouTube channel")}</h3>
+            <p class="muted">${escapeHtml(yt.channel?.description || "Public YouTube Data API connection is active.")}</p>
+          </div>
+          <div class="channel-stat-row">
+            ${scoreChip("Subscribers", formatNumber(yt.channel?.subscribers))}
+            ${scoreChip("Total views", formatNumber(yt.channel?.views))}
+            ${scoreChip("Videos", formatNumber(yt.channel?.videoCount || videos.length))}
+          </div>
+        </article>
+
+        <div class="youtube-workspace-v5">
+          <article class="dashboard-card video-browser-card">
+            <div class="card-topline"><div><span class="section-kicker">Choose a video</span><h3>Recent uploads</h3></div></div>
+            <div class="video-table video-table-v5">
+              ${videos.length ? videos.map((video) => videoRowV5(video)).join("") : emptyMini("No recent public videos found.")}
             </div>
           </article>
-          <article class="dashboard-card">
-            <div class="card-topline"><div><span class="section-kicker">Growth coach</span><h3>Recommendations</h3></div></div>
-            <div class="list-stack">
-              ${growthInsightsFromVideos(videos).map((item) => insight(item.title, item.text)).join("")}
-            </div>
+          <aside class="dashboard-card selected-video-card">
+            <div class="card-topline"><div><span class="section-kicker">Selected video</span><h3>${escapeHtml(selected?.title || "No video selected")}</h3></div></div>
+            ${selected ? selectedVideoPanel(selected) : emptyMini("Pick a video to inspect comments and growth actions.")}
+          </aside>
+        </div>
+
+        <div class="growth-grid-v5">
+          ${growthInsightsFromVideos(videos).map((item) => `<article class="dashboard-card insight-card-v5">${insight(item.title, item.text)}</article>`).join("")}
+          <article class="dashboard-card google-connect-card">
+            <span class="section-kicker">Reply posting</span>
+            <h3>${state.google?.youtubePosting ? "Google connected" : "Connect Google to post replies"}</h3>
+            <p class="muted">Contentus always drafts first. Posting requires Google OAuth and your approval on each reply.</p>
+            <button class="button ${state.google?.youtubePosting ? "secondary" : "primary"}" type="button" data-action="v4-google-connect" data-scope="youtube">${state.google?.youtubePosting ? "Reconnect Google" : "Enable approved posting"}</button>
           </article>
         </div>
       ` : emptyPanel("No YouTube channel linked", "Paste your public YouTube handle, channel URL, or video URL to fetch real channel/video data.", "Private watch time, retention, and CTR require Google OAuth credentials.")}
@@ -2908,35 +2997,91 @@ function youtubeGrowthPageV4() {
 }
 
 function videoRowV4(video) {
+  return videoRowV5(video);
+}
+
+function videoRowV5(video) {
+  const disabled = Boolean(video.commentsDisabled);
+  const active = selectedVideo()?.id === video.id;
   return `
-    <div class="video-row">
+    <div class="video-row video-row-v5 ${active ? "active" : ""}">
       ${video.thumbnail ? `<img src="${escapeHtml(video.thumbnail)}" alt="">` : `<span class="thumb-placeholder"></span>`}
       <div>
         <strong>${escapeHtml(video.title || "Untitled video")}</strong>
-        <small>${formatNumber(video.views)} views - ${formatNumber(video.likes)} likes - ${formatNumber(video.comments)} comments</small>
+        <small>${formatNumber(video.views)} views - ${formatNumber(video.likes)} likes - ${formatNumber(video.comments)} comments - ${formatDate(video.publishedAt)}</small>
       </div>
-      <button class="button secondary" type="button" data-action="v4-load-comments" data-video-id="${escapeHtml(video.id)}">Load comments</button>
+      <div class="video-row-actions">
+        <button class="button secondary" type="button" data-action="v4-select-video" data-video-id="${escapeHtml(video.id)}">Select</button>
+        <button class="button ${disabled ? "secondary" : "primary"}" type="button" data-action="v4-load-comments" data-video-id="${escapeHtml(video.id)}" ${disabled ? "disabled" : ""}>${disabled ? "Comments disabled" : "Open comments"}</button>
+      </div>
+    </div>
+  `;
+}
+
+function selectedVideoPanel(video) {
+  return `
+    ${video.thumbnail ? `<img class="selected-video-thumb" src="${escapeHtml(video.thumbnail)}" alt="">` : ""}
+    <div class="score-grid compact-score-grid">
+      ${scoreChip("Views", formatNumber(video.views))}
+      ${scoreChip("Likes", formatNumber(video.likes))}
+      ${scoreChip("Comments", video.commentsDisabled ? "Disabled" : formatNumber(video.comments))}
+    </div>
+    <div class="list-stack">
+      ${insight("Repeat", `Turn the strongest idea in this video into a follow-up with a sharper proof point.`)}
+      ${insight("Improve", "If comments are low, test a clearer question in the outro and pinned comment.")}
+      ${insight("Community", video.commentsDisabled ? "Comments are disabled for this video. Choose another video to analyze comments." : "Open comments to draft replies and find video ideas.")}
     </div>
   `;
 }
 
 function communityPageV4() {
   const commentsList = normalizeList(state.comments);
+  const videos = normalizeList(state.youtube?.videos || state.youtube?.recentVideos);
+  const selected = selectedVideo();
+  const loadedForSelected = commentsList.filter((comment) => !selected?.id || comment.videoId === selected.id);
   return `
     <section class="page page-v4">
-      <div class="page-hero compact-hero">
+      <div class="page-hero compact-hero community-hero-v5">
         <div>
           <p class="section-kicker">Community Manager</p>
-          <h2>${commentsList.length ? "Real comments loaded" : "Load comments from YouTube first"}</h2>
-          <p class="muted">Contentus drafts replies in your voice. It does not auto-post without explicit OAuth and posting permissions.</p>
+          <h2>${selected ? escapeHtml(selected.title) : "Choose a video to manage comments"}</h2>
+          <p class="muted">Contentus creates reply drafts. Posting requires you to connect Google and approve each reply.</p>
         </div>
         <div class="action-row">
-          <a class="button secondary" href="#/app/youtube-growth">Choose video</a>
-          <button class="button primary" type="button" data-action="v4-generate-replies" ${commentsList.length ? "" : "disabled"}>Generate reply drafts</button>
+          <button class="button secondary" type="button" data-action="v4-google-connect" data-scope="youtube">${state.google?.youtubePosting ? "Google connected" : "Enable posting"}</button>
+          <button class="button primary" type="button" data-action="v4-generate-replies" ${loadedForSelected.length ? "" : "disabled"}>Generate reply drafts</button>
         </div>
       </div>
-      <div class="dashboard-grid dashboard-grid-v4" id="comments-output">
-        ${commentsList.length ? commentsList.map(commentCardV4).join("") : emptyPanel("No comments yet", "Open YouTube + Growth, link a channel, then load comments from a video.", "Reply drafts are generated after comments are loaded.")}
+
+      <div class="community-workspace-v5" id="comments-output">
+        <aside class="dashboard-card community-video-picker">
+          <div class="card-topline"><div><span class="section-kicker">Videos</span><h3>Pick one</h3></div></div>
+          <div class="video-picker-list">
+            ${videos.length ? videos.map((video) => `
+              <button class="video-picker-item ${selected?.id === video.id ? "active" : ""}" type="button" data-action="v4-select-video" data-video-id="${escapeHtml(video.id)}">
+                ${video.thumbnail ? `<img src="${escapeHtml(video.thumbnail)}" alt="">` : `<span class="thumb-placeholder"></span>`}
+                <span><strong>${escapeHtml(video.title || "Untitled video")}</strong><small>${video.commentsDisabled ? "Comments disabled" : `${formatNumber(video.comments)} comments`}</small></span>
+              </button>
+            `).join("") : emptyMini("Link a YouTube channel first.")}
+          </div>
+          ${selected ? `<button class="button primary full-width" type="button" data-action="v4-load-comments" data-video-id="${escapeHtml(selected.id)}" ${selected.commentsDisabled ? "disabled" : ""}>${selected.commentsDisabled ? "Comments disabled" : "Load comments"}</button>` : ""}
+        </aside>
+
+        <section class="community-comments-list">
+          ${loadedForSelected.length ? loadedForSelected.map(commentCardV4).join("") : emptyPanel("No comments loaded", selected?.commentsDisabled ? "Comments are disabled for this video. Choose another video." : "Choose a video and load comments to draft replies.", "Each reply draft will show the source video and require approval before posting.")}
+        </section>
+
+        <aside class="dashboard-card reply-help-card">
+          <span class="section-kicker">How posting works</span>
+          <h3>${state.google?.youtubePosting ? "Ready to approve replies" : "Connect Google to post"}</h3>
+          <p class="muted">Contentus never auto-posts. It drafts a reply, shows the video and comment, then waits for you to click Post Reply.</p>
+          <div class="list-stack">
+            ${insight("1. Connect Google", "Enable YouTube posting permission with OAuth.")}
+            ${insight("2. Generate drafts", "Contentus writes replies in your Creator DNA voice.")}
+            ${insight("3. Approve each reply", "Only the replies you click are posted.")}
+          </div>
+          <button class="button ${state.google?.youtubePosting ? "secondary" : "primary"} full-width" type="button" data-action="v4-google-connect" data-scope="youtube">${state.google?.youtubePosting ? "Reconnect Google" : "Enable approved posting"}</button>
+        </aside>
       </div>
     </section>
   `;
@@ -2946,7 +3091,7 @@ function commentCardV4(comment) {
   return `
     <article class="dashboard-card comment-card">
       <div class="card-topline">
-        <div><span class="section-kicker">${escapeHtml(comment.sentiment || "comment")}</span><h3>${escapeHtml(comment.author || "Viewer")}</h3></div>
+        <div><span class="section-kicker">${escapeHtml(comment.sentiment || "comment")}</span><h3>${escapeHtml(comment.author || "Viewer")}</h3><small>${escapeHtml(videoTitleFor(comment.videoId))}</small></div>
         <span class="badge ${comment.sentiment === "toxic" ? "bad" : comment.sentiment === "critical" ? "warn" : "good"}">${escapeHtml(comment.importance || "normal")}</span>
       </div>
       <p>${escapeHtml(comment.text || comment.commentText || "")}</p>
@@ -2954,6 +3099,7 @@ function commentCardV4(comment) {
       <div class="action-row">
         <button class="button secondary" type="button" data-action="copy" data-copy="${escapeHtml(comment.suggestedReply || "")}">Copy reply</button>
         <button class="button secondary" type="button" data-action="v4-comment-to-idea" data-comment-id="${escapeHtml(comment.id)}">Turn into idea</button>
+        ${comment.suggestedReply ? `<button class="button primary" type="button" data-action="v4-post-reply" data-comment-id="${escapeHtml(comment.id)}" ${state.google?.youtubePosting ? "" : "disabled"}>${comment.posted ? "Posted" : "Post reply"}</button>` : ""}
       </div>
     </article>
   `;
@@ -2961,32 +3107,70 @@ function commentCardV4(comment) {
 
 function calendarPageV4() {
   const items = normalizeList(state.calendar);
-  const days = Array.from({ length: 30 }, (_, index) => index + 1);
+  const view = calendarViewDate();
+  const cells = calendarCells(view);
+  const googleEvents = normalizeList(state.googleCalendarEvents);
   return `
     <section class="page page-v4">
-      <div class="page-hero compact-hero">
+      <div class="page-hero compact-hero calendar-hero-v5" data-tour-target="calendar">
         <div>
           <p class="section-kicker">Content Calendar</p>
-          <h2>${items.length ? `${items.length} planned items` : "Plan from real ideas and scripts"}</h2>
-          <p class="muted">${burnoutLabel()}</p>
+          <h2>${monthLabel(view)}</h2>
+          <p class="muted">${state.google?.calendar ? "Google Calendar is connected. App events can sync to Google." : "Connect Google Calendar to load and create events from Contentus."}</p>
         </div>
-        <button class="button primary" type="button" data-action="v4-weekly-plan">Generate weekly plan</button>
+        <div class="action-row">
+          <button class="button secondary" type="button" data-action="v4-calendar-nav" data-direction="today">Today</button>
+          <button class="button secondary" type="button" data-action="v4-calendar-nav" data-direction="prev">Prev</button>
+          <button class="button secondary" type="button" data-action="v4-calendar-nav" data-direction="next">Next</button>
+          <button class="button secondary" type="button" data-action="v4-google-connect" data-scope="calendar">${state.google?.calendar ? "Reconnect Google" : "Link Google Calendar"}</button>
+          <button class="button primary" type="button" data-action="v4-load-calendar">${state.google?.calendar ? "Refresh events" : "Load events"}</button>
+        </div>
       </div>
-      <div class="calendar-grid calendar-v4">
-        ${days.map((day) => `
-          <div class="calendar-day" data-day="${day}">
-            <strong>${day}</strong>
-            ${items.filter((item) => Number(item.day) === day).map((item) => `
-              <article class="calendar-item" draggable="true" data-calendar-id="${escapeHtml(item.id)}">
-                <span>${escapeHtml(item.platform || "Content")}</span>
-                <p>${escapeHtml(item.title)}</p>
-                <small>${escapeHtml(item.status || "idea")}</small>
-              </article>
-            `).join("")}
+
+      <div class="calendar-workspace-v5">
+        <section class="dashboard-card calendar-panel-v5">
+          <div class="calendar-weekdays">${["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => `<span>${day}</span>`).join("")}</div>
+          <div class="calendar-grid calendar-v5">
+            ${cells.map((cell) => calendarCellV5(cell, items, googleEvents)).join("")}
           </div>
-        `).join("")}
+        </section>
+
+        <aside class="dashboard-card event-editor-v5">
+          <span class="section-kicker">Add event</span>
+          <h3>Create a calendar item</h3>
+          <p class="muted">If Google Calendar is connected, this event is also created in Google Calendar.</p>
+          <div class="form-field"><label for="calendar-title">Title</label><input id="calendar-title" placeholder="Film YouTube intro"></div>
+          <div class="form-field"><label for="calendar-date">Date</label><input id="calendar-date" type="date" value="${formatInputDate(new Date())}"></div>
+          <div class="form-row two">
+            <div class="form-field"><label for="calendar-start">Start</label><input id="calendar-start" type="time" value="10:00"></div>
+            <div class="form-field"><label for="calendar-end">End</label><input id="calendar-end" type="time" value="11:00"></div>
+          </div>
+          <div class="form-field"><label for="calendar-platform">Platform / type</label><input id="calendar-platform" placeholder="YouTube, Reel, writing, meeting"></div>
+          <div class="form-field"><label for="calendar-notes">Notes</label><textarea id="calendar-notes" placeholder="What needs to happen?"></textarea></div>
+          <button class="button primary full-width" type="button" data-action="v4-add-calendar-event">Add event</button>
+          <button class="button secondary full-width" type="button" data-action="v4-weekly-plan">Generate weekly plan</button>
+        </aside>
       </div>
     </section>
+  `;
+}
+
+function calendarCellV5(cell, items, googleEvents) {
+  const dateKey = formatInputDate(cell.date);
+  const appItems = items.filter((item) => item.date === dateKey || (!item.date && Number(item.day) === cell.date.getDate() && cell.inMonth));
+  const gItems = googleEvents.filter((event) => event.date === dateKey);
+  return `
+    <div class="calendar-day calendar-day-v5 ${cell.inMonth ? "" : "muted-day"} ${isToday(cell.date) ? "today" : ""}" data-day="${cell.date.getDate()}">
+      <strong>${cell.date.getDate()}</strong>
+      ${gItems.map((event) => `<article class="calendar-item google-event"><span>Google</span><p>${escapeHtml(event.title)}</p><small>${escapeHtml(event.time || "All day")}</small></article>`).join("")}
+      ${appItems.map((item) => `
+        <article class="calendar-item" draggable="true" data-calendar-id="${escapeHtml(item.id)}">
+          <span>${escapeHtml(item.platform || "Contentus")}</span>
+          <p>${escapeHtml(item.title)}</p>
+          <small>${escapeHtml(item.status || item.startTime || "idea")}</small>
+        </article>
+      `).join("")}
+    </div>
   `;
 }
 
@@ -3055,8 +3239,18 @@ document.addEventListener("click", async (event) => {
   if (action === "v4-download-thumbnail") return downloadThumbnailPng();
   if (action === "v4-score-auth") return handleScoreAuthenticityV4(button);
   if (action === "v4-link-youtube") return handleLinkYouTubeV4(button);
+  if (action === "v4-select-video") return handleSelectVideoV4(button.dataset.videoId);
   if (action === "v4-load-comments") return handleLoadCommentsV4(button);
   if (action === "v4-generate-replies") return handleGenerateRepliesV4(button);
+  if (action === "v4-post-reply") return handlePostReplyV4(button);
+  if (action === "v4-google-connect") return handleGoogleConnectV4(button);
+  if (action === "v4-load-calendar") return handleLoadGoogleCalendarV4(button);
+  if (action === "v4-add-calendar-event") return handleAddCalendarEventV4(button);
+  if (action === "v4-calendar-nav") return handleCalendarNavV4(button.dataset.direction);
+  if (action === "v4-tutorial-next") return handleTutorialNav(1);
+  if (action === "v4-tutorial-back") return handleTutorialNav(-1);
+  if (action === "v4-tutorial-skip") return finishTutorial();
+  if (action === "v4-restart-tutorial") return restartTutorial();
   if (action === "v4-comment-to-idea") return commentToIdea(button.dataset.commentId);
   if (action === "v4-weekly-plan") return handleWeeklyPlanV4(button);
 });
@@ -3359,6 +3553,7 @@ async function handleLinkYouTubeV4(button) {
     }
     state.youtube = result.data;
     state.youtubeConnected = true;
+    state.selectedVideoId = normalizeList(result.data.videos)[0]?.id || "";
     state.comments = [];
     saveState();
     render();
@@ -3366,15 +3561,32 @@ async function handleLinkYouTubeV4(button) {
   });
 }
 
+function handleSelectVideoV4(videoId) {
+  state.selectedVideoId = videoId || "";
+  saveState();
+  render();
+}
+
 async function handleLoadCommentsV4(button) {
   await withBusy(button, "Loading...", async () => {
     const videoId = button.dataset.videoId;
     const result = await apiJson("/api/youtube/comments", { method: "POST", body: { videoId } });
     if (!result.ok) {
-      toast(result.data.message || result.data.error || "Could not load comments.");
+      const message = result.data.message || result.data.error || "Could not load comments.";
+      if (result.data.commentsDisabled || /disabled comments|comments.*disabled|has disabled comments/i.test(message)) {
+        markVideoCommentsDisabled(videoId);
+        toast("Comments are disabled for this video. Choose another video.");
+        render();
+        return;
+      }
+      toast(cleanApiMessage(message));
       return;
     }
-    state.comments = normalizeList(result.data.comments);
+    state.selectedVideoId = videoId;
+    state.comments = normalizeList(result.data.comments).map((comment) => ({
+      ...comment,
+      videoTitle: videoTitleFor(comment.videoId || videoId),
+    }));
     saveState();
     routeTo("/app/community");
     toast("Comments loaded.");
@@ -3392,10 +3604,46 @@ async function handleGenerateRepliesV4(button) {
       return;
     }
     const replies = normalizeList(result.data.comments);
-    state.comments = state.comments.map((comment) => replies.find((reply) => reply.id === comment.id) || comment);
+    state.comments = state.comments.map((comment) => {
+      const reply = replies.find((item) => item.id === comment.id);
+      return reply ? { ...comment, ...reply, videoTitle: comment.videoTitle || videoTitleFor(comment.videoId) } : comment;
+    });
     saveState();
     render();
     toast("Reply drafts generated.");
+  });
+}
+
+async function handlePostReplyV4(button) {
+  await withBusy(button, "Posting...", async () => {
+    const comment = state.comments.find((item) => item.id === button.dataset.commentId);
+    if (!comment?.suggestedReply) return;
+    const result = await apiJson("/api/youtube/reply", {
+      method: "POST",
+      auth: true,
+      body: { parentId: comment.id, text: comment.suggestedReply },
+    });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Connect Google before posting replies.");
+      return;
+    }
+    comment.posted = true;
+    comment.postedReplyId = result.data.replyId;
+    saveState();
+    render();
+    toast("Reply posted to YouTube.");
+  });
+}
+
+async function handleGoogleConnectV4(button) {
+  await withBusy(button, "Connecting...", async () => {
+    const scope = button.dataset.scope || "all";
+    const result = await apiJson(`/api/google/oauth/start?scope=${encodeURIComponent(scope)}`, { auth: true });
+    if (!result.ok || !result.data.authUrl) {
+      toast(result.data.message || result.data.error || "Google OAuth is not configured.");
+      return;
+    }
+    location.href = result.data.authUrl;
   });
 }
 
@@ -3441,6 +3689,107 @@ function handleWeeklyPlanV4(button) {
   saveState();
   render();
   toast("Weekly plan created from your saved content.");
+}
+
+async function handleLoadGoogleCalendarV4(button) {
+  await withBusy(button, "Loading...", async () => {
+    const view = calendarViewDate();
+    const range = calendarRange(view);
+    const result = await apiJson(`/api/calendar/events?timeMin=${encodeURIComponent(range.timeMin)}&timeMax=${encodeURIComponent(range.timeMax)}`, { auth: true });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Connect Google Calendar first.");
+      return;
+    }
+    state.googleCalendarEvents = normalizeList(result.data.events);
+    state.google = { ...(state.google || {}), calendar: true, ...result.data.google };
+    saveState();
+    render();
+    toast("Google Calendar events loaded.");
+  });
+}
+
+async function handleAddCalendarEventV4(button) {
+  await withBusy(button, "Adding...", async () => {
+    const title = document.querySelector("#calendar-title")?.value.trim();
+    const date = document.querySelector("#calendar-date")?.value;
+    const startTime = document.querySelector("#calendar-start")?.value;
+    const endTime = document.querySelector("#calendar-end")?.value;
+    const platform = document.querySelector("#calendar-platform")?.value.trim();
+    const notes = document.querySelector("#calendar-notes")?.value.trim();
+    if (!title || !date) {
+      toast("Add a title and date.");
+      return;
+    }
+    const item = {
+      id: `cal-${Date.now()}`,
+      title,
+      date,
+      startTime,
+      endTime,
+      platform,
+      status: "scheduled",
+      contentType: platform,
+      notes,
+      day: Number(date.slice(-2)),
+    };
+    if (state.google?.calendar) {
+      const result = await apiJson("/api/calendar/events", {
+        method: "POST",
+        auth: true,
+        body: item,
+      });
+      if (result.ok) {
+        item.googleEventId = result.data.event?.id;
+        state.googleCalendarEvents.push(result.data.event);
+      } else {
+        toast(result.data.message || result.data.error || "Saved locally, but Google Calendar sync failed.");
+      }
+    }
+    state.calendar.push(item);
+    saveState();
+    render();
+    toast(state.google?.calendar ? "Event added and synced." : "Event added.");
+  });
+}
+
+function handleCalendarNavV4(direction) {
+  const view = calendarViewDate();
+  if (direction === "today") {
+    state.calendarViewDate = formatInputDate(new Date()).slice(0, 7);
+  } else {
+    const next = new Date(view);
+    next.setMonth(next.getMonth() + (direction === "next" ? 1 : -1));
+    state.calendarViewDate = formatInputDate(next).slice(0, 7);
+  }
+  saveState();
+  render();
+}
+
+function handleTutorialNav(delta) {
+  const max = tutorialStepsV4().length - 1;
+  const next = Number(state.tutorialStep || 0) + delta;
+  if (next > max) {
+    finishTutorial();
+    return;
+  }
+  state.tutorialStep = Math.max(0, next);
+  saveState();
+  render();
+}
+
+function finishTutorial() {
+  state.tutorialCompleted = true;
+  state.tutorialStep = 0;
+  saveState();
+  render();
+  toast("Tutorial completed.");
+}
+
+function restartTutorial() {
+  state.tutorialCompleted = false;
+  state.tutorialStep = 0;
+  saveState();
+  render();
 }
 
 async function handleThumbnailCopy(button) {
@@ -3583,6 +3932,42 @@ function ideaOptions() {
 
 function selectedIdea() {
   return state.ideas.find((idea) => idea.id === state.selectedIdeaId) || state.ideas[0] || null;
+}
+
+function selectedVideo() {
+  const videos = normalizeList(state.youtube?.videos || state.youtube?.recentVideos);
+  return videos.find((video) => video.id === state.selectedVideoId) || videos[0] || null;
+}
+
+function videoTitleFor(videoId) {
+  const videos = normalizeList(state.youtube?.videos || state.youtube?.recentVideos);
+  return videos.find((video) => video.id === videoId)?.title || "Selected video";
+}
+
+function markVideoCommentsDisabled(videoId) {
+  const videos = normalizeList(state.youtube?.videos || state.youtube?.recentVideos);
+  const video = videos.find((item) => item.id === videoId);
+  if (video) video.commentsDisabled = true;
+  if (state.youtube?.videos) state.youtube.videos = videos;
+  state.selectedVideoId = videoId;
+  saveState();
+}
+
+function cleanApiMessage(message = "") {
+  const stripped = String(message).replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  if (/disabled comments|comments.*disabled|has disabled comments/i.test(stripped)) {
+    return "Comments are disabled for this video. Choose another video.";
+  }
+  return stripped || "Something went wrong.";
+}
+
+function googlePublicClientState(meta = {}) {
+  return {
+    calendar: Boolean(meta.calendar || meta.calendarConnected || meta.capabilities?.calendar),
+    youtubePosting: Boolean(meta.youtubePosting || meta.capabilities?.youtube),
+    reconnectRequired: Boolean(meta.reconnectRequired || meta.reconnect_required),
+    expiresAt: meta.expiresAt || meta.expires_at,
+  };
 }
 
 function emptyPanel(title, text, detail = "") {
@@ -3850,6 +4235,55 @@ function formatNumber(value) {
   return new Intl.NumberFormat(undefined, { notation: number >= 10000 ? "compact" : "standard" }).format(number);
 }
 
+function formatDate(value) {
+  if (!value) return "Unknown date";
+  try {
+    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
+}
+
+function formatInputDate(date) {
+  const value = new Date(date);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function calendarViewDate() {
+  const base = state.calendarViewDate || formatInputDate(new Date()).slice(0, 7);
+  const [year, month] = base.split("-").map(Number);
+  return new Date(year, month - 1, 1);
+}
+
+function monthLabel(date) {
+  return new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(date);
+}
+
+function calendarCells(view) {
+  const start = new Date(view.getFullYear(), view.getMonth(), 1);
+  const firstDay = start.getDay();
+  const gridStart = new Date(start);
+  gridStart.setDate(start.getDate() - firstDay);
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+    return { date, inMonth: date.getMonth() === view.getMonth() };
+  });
+}
+
+function calendarRange(view) {
+  const start = new Date(view.getFullYear(), view.getMonth(), 1);
+  const end = new Date(view.getFullYear(), view.getMonth() + 1, 1);
+  return { timeMin: start.toISOString(), timeMax: end.toISOString() };
+}
+
+function isToday(date) {
+  return formatInputDate(date) === formatInputDate(new Date());
+}
+
 async function bootstrap() {
   app.innerHTML = `
     <section class="boot-screen" aria-label="Loading Contentus">
@@ -3861,6 +4295,19 @@ async function bootstrap() {
   await initAuth();
   initMotionBackground();
   render();
+  const googleMessage = localStorage.getItem("contentus-google-message");
+  if (googleMessage) {
+    localStorage.removeItem("contentus-google-message");
+    toast(googleMessage);
+    if (authSession?.access_token) {
+      const saved = await apiJson("/api/user/state", { auth: true });
+      if (saved.ok && saved.data.user?.user_metadata?.google_oauth) {
+        state.google = googlePublicClientState(saved.data.user.user_metadata.google_oauth);
+        saveState();
+        render();
+      }
+    }
+  }
 }
 
 bootstrap();
