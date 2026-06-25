@@ -9,6 +9,6 @@ services:
       - key: NODE_ENV
         value: production
       - key: CONTENTUS_MODE
-        value: demo
+        value: production
       - key: SKIP_INSTALL_DEPS
         value: true

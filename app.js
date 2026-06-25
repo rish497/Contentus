@@ -4,101 +4,34 @@ const app = document.querySelector("#app");
 const toastRegion = document.querySelector("#toast-region");
 const canvas = document.querySelector("#motion-bg");
 
-const STORAGE_KEY = "contentus-prototype-state";
+const STORAGE_KEY = "contentus-workspace-state";
 const AUTH_KEY = "contentus-auth-session";
 
 const defaultState = {
+  workspaceVersion: 4,
   authed: false,
   youtubeConnected: false,
   creator: {
-    name: "Rishabh",
+    name: "",
     creatorName: "",
-    niche: "Study productivity, AI tools, and student creator life",
-    audience: "Students and beginner creators who want practical, honest systems.",
-    platforms: ["YouTube", "Instagram", "TikTok", "Newsletter"],
-    tone: ["funny", "educational", "honest", "slightly chaotic"],
-    values: "Originality, useful honesty, audience trust, no fake claims, no copying.",
-    boundaries: "No deepfakes, no fake testimonials, no manipulative scarcity, no unsafe health or finance claims.",
-    topicsLoved: "AI study systems, creator workflows, productivity experiments, behind-the-scenes mistakes.",
-    topicsAvoided: "Copying viral creators, fake income promises, exaggerated brand claims.",
+    niche: "",
+    audience: "",
+    platforms: [],
+    tone: [],
+    values: "",
+    boundaries: "",
+    topicsLoved: "",
+    topicsAvoided: "",
   },
-  dna: {
-    score: 92,
-    tone: "Funny, educational, honest, and slightly chaotic.",
-    humor: "Self-aware roasts, quick reversals, relatable student chaos.",
-    phrases: ["okay, this got out of hand", "future me will hate this", "actually useful, not fake productive"],
-    story: "Starts with a messy personal problem, tests a system, then gives the audience a practical takeaway.",
-    visual: "Fast cuts, annotated screens, clean captions, proof screenshots, warm desk shots.",
-    themes: ["study systems", "AI tools", "creator workflow", "student discipline", "burnout prevention"],
-    audienceType: "Ambitious students and creators who want help without being talked down to.",
-    editingPace: "Fast intro, calmer explanation, proof-heavy middle, crisp CTA.",
-    hookStyle: "Confession, experiment, or self-roast that quickly becomes useful.",
-    language: "Simple, direct, playful, no corporate filler.",
-    emotional: "Encouraging but honest about the mess.",
-    avoid: "Generic hustle content, fake certainty, copying, overclaiming, and robotic CTAs.",
-  },
-  ideas: [
-    {
-      id: "idea-1",
-      title: "I Let AI Plan My Study Week and It Exposed How Chaotic I Am",
-      hook: "I asked AI to fix my study routine. It immediately roasted my entire life.",
-      platform: "YouTube",
-      contentType: "YouTube video",
-      concept: "Use AI to audit a real messy week, then rebuild the schedule with realistic study blocks.",
-      why: "It is funny, relatable, and useful for students who feel behind.",
-      emotional: "Self-aware chaos turning into practical relief.",
-      genericRisk: "Medium",
-      personalTip: "Show your real old schedule and one uncomfortable habit the AI caught.",
-      cta: "Comment one routine you want me to let AI fix next.",
-      status: "scripting",
-      source: "Idea Engine",
-    },
-    {
-      id: "idea-2",
-      title: "The 12-Second Intro Test for Student YouTubers",
-      hook: "If your video takes longer than 12 seconds to become useful, your audience already left.",
-      platform: "Shorts",
-      contentType: "TikTok/Reel/Short",
-      concept: "Explain a quick retention test with before-and-after hook examples.",
-      why: "Beginner creators need a simple way to diagnose drop-off.",
-      emotional: "Tough love with an easy fix.",
-      genericRisk: "Low",
-      personalTip: "Use one of your underperforming intros as the example.",
-      cta: "Send me your intro and I will rate it.",
-      status: "idea",
-      source: "Growth Coach",
-    },
-  ],
-  scripts: [
-    {
-      id: "script-1",
-      ideaId: "idea-1",
-      title: "AI Planned My Study Week",
-      platform: "YouTube",
-      authenticityScore: 88,
-      genericRisk: "Medium",
-      script: "Cold open: I gave AI my actual study week and, unfortunately, it had notes. First, here is the chaos. Then I ask it to rebuild the week with classes, revision, editing, and a real rest day. By the end, we compare the ideal plan with what I can actually follow.",
-      shotList: ["Screen recording of calendar", "Desk reset", "AI prompt close-up", "Before/after schedule", "Final honest verdict"],
-      caption: "I let AI plan my study week. It was rude, but useful.",
-    },
-  ],
-  calendar: [
-    { id: "cal-1", day: 4, title: "AI study week video", platform: "YouTube", status: "filming", contentType: "Growth", notes: "Record intro and calendar audit." },
-    { id: "cal-2", day: 7, title: "12-second intro test", platform: "Shorts", status: "scheduled", contentType: "Educational", notes: "Cut from analytics page." },
-    { id: "cal-3", day: 12, title: "Creator DNA carousel", platform: "Instagram", status: "idea", contentType: "Community", notes: "Explain voice profile with examples." },
-    { id: "cal-4", day: 19, title: "Burnout reset newsletter", platform: "Newsletter", status: "scripting", contentType: "Personal", notes: "Keep it honest and short." },
-  ],
-  inspiration: [
-    {
-      id: "insp-1",
-      sourceTitle: "YouTube: How I stopped procrastinating",
-      sourceUrl: "https://youtube.com/watch?v=demo",
-      selectedText: "The creator opens with a personal failure before giving the system.",
-      platform: "YouTube",
-      analysis: "Use the vulnerability-first pattern, but make the story about your own study workflow.",
-      createdAt: "Today",
-    },
-  ],
+  dna: null,
+  ideas: [],
+  scripts: [],
+  thumbnails: [],
+  calendar: [],
+  inspiration: [],
+  youtube: null,
+  comments: [],
+  growthInsights: [],
 };
 
 const analytics = {
@@ -192,8 +125,8 @@ let appConfig = {
     firebase: false,
     sessionSecret: false,
   },
-  authProvider: "local-demo",
-  aiProvider: "mock",
+  authProvider: "not-configured",
+  aiProvider: "local-fallback",
 };
 let saveTimer = null;
 
@@ -207,16 +140,39 @@ function loadState() {
 }
 
 function mergeState(base, saved) {
-  return {
-    ...structuredClone(base),
+  const cleanBase = structuredClone(base);
+  const isLegacyDemo = saved.workspaceVersion !== cleanBase.workspaceVersion;
+  const merged = {
+    ...cleanBase,
     ...saved,
-    creator: { ...base.creator, ...saved.creator },
-    dna: { ...base.dna, ...saved.dna },
-    ideas: saved.ideas || base.ideas,
-    scripts: saved.scripts || base.scripts,
-    calendar: saved.calendar || base.calendar,
-    inspiration: saved.inspiration || base.inspiration,
+    workspaceVersion: cleanBase.workspaceVersion,
+    creator: { ...cleanBase.creator, ...(saved.creator || {}) },
+    dna: isLegacyDemo ? null : (saved.dna || null),
+    ideas: isLegacyDemo ? [] : (Array.isArray(saved.ideas) ? saved.ideas : cleanBase.ideas),
+    scripts: isLegacyDemo ? [] : (Array.isArray(saved.scripts) ? saved.scripts : cleanBase.scripts),
+    thumbnails: isLegacyDemo ? [] : (Array.isArray(saved.thumbnails) ? saved.thumbnails : cleanBase.thumbnails),
+    calendar: isLegacyDemo ? [] : (Array.isArray(saved.calendar) ? saved.calendar : cleanBase.calendar),
+    inspiration: isLegacyDemo ? [] : (Array.isArray(saved.inspiration) ? saved.inspiration : cleanBase.inspiration),
+    youtube: isLegacyDemo ? null : (saved.youtube || null),
+    comments: isLegacyDemo ? [] : (Array.isArray(saved.comments) ? saved.comments : cleanBase.comments),
+    growthInsights: isLegacyDemo ? [] : (Array.isArray(saved.growthInsights) ? saved.growthInsights : cleanBase.growthInsights),
   };
+
+  if (isLegacyDemo) {
+    merged.creator.name = "";
+    merged.creator.creatorName = "";
+    merged.creator.niche = "";
+    merged.creator.audience = "";
+    merged.creator.platforms = [];
+    merged.creator.tone = [];
+    merged.creator.values = "";
+    merged.creator.boundaries = "";
+    merged.creator.topicsLoved = "";
+    merged.creator.topicsAvoided = "";
+    merged.youtubeConnected = false;
+  }
+
+  return merged;
 }
 
 function saveState() {
@@ -493,28 +449,31 @@ function closeMobileSidebar() {
 }
 
 function render() {
-  if (activeRoute === "/" || activeRoute === "/landing") {
+  if (activeRoute === "/" || activeRoute === "/landing" || ["/features", "/workflow", "/chrome-helper"].includes(activeRoute)) {
     app.className = "app-root";
-    app.innerHTML = landingView();
+    app.innerHTML = landingViewV4();
     bindHeroTilt();
+    if (activeRoute !== "/" && activeRoute !== "/landing") {
+      requestAnimationFrame(() => document.querySelector(`#${activeRoute.slice(1)}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
     return;
   }
 
   if (activeRoute === "/login") {
     app.className = "app-root";
-    app.innerHTML = authView();
+    app.innerHTML = authViewV4();
     return;
   }
 
   if (!state.authed && activeRoute.startsWith("/app")) {
     app.className = "app-root";
-    app.innerHTML = authView();
+    app.innerHTML = authViewV4();
     setAuthNote("Sign in or create an account to save and load your Contentus workspace.");
     return;
   }
 
   app.className = "app-root";
-  app.innerHTML = appShell(activeRoute);
+  app.innerHTML = appShellV4(activeRoute);
 }
 
 function landingView() {
@@ -676,6 +635,18 @@ function workflowCard(step, title, text) {
 }
 
 function bindHeroTilt() {
+  const reactive = document.querySelector(".hero-reactive");
+  if (reactive) {
+    document.addEventListener("pointermove", (event) => {
+      const rect = reactive.getBoundingClientRect();
+      const x = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100));
+      reactive.style.setProperty("--mx", `${x}%`);
+      reactive.style.setProperty("--my", `${y}%`);
+    }, { passive: true });
+    return;
+  }
+
   const stack = document.querySelector(".product-stack");
   if (!stack) return;
   document.addEventListener("pointermove", (event) => {
@@ -943,7 +914,7 @@ function dnaPage() {
             <div class="form-field full">
               <label>Tone</label>
               <div class="toggle-group">
-                ${["funny", "educational", "cinematic", "emotional", "sarcastic", "professional", "chaotic", "motivational", "calm", "bold"].map((tone) => `<button class="pill-button ${state.creator.tone.includes(tone) ? "active" : ""}" type="button" data-action="toggle-pill">${tone}</button>`).join("")}
+                ${["funny", "educational", "cinematic", "emotional", "sarcastic", "professional", "chaotic", "motivational", "calm", "bold"].map((tone) => `<button class="pill-button ${(state.creator.tone || []).includes(tone) ? "active" : ""}" type="button" data-action="toggle-pill">${tone}</button>`).join("")}
               </div>
             </div>
             ${field("samples", "Paste captions, scripts, posts, or transcripts", "I tried to become productive for a week and somehow created a spreadsheet that judged me harder than my exams did.\n\nHere is the thing: productivity advice only works if it survives your actual messy life.", "textarea", "full")}
@@ -2073,6 +2044,1810 @@ function initMotionBackground() {
   });
   resize();
   draw();
+}
+
+/* Contentus production workspace overrides.
+   These functions intentionally replace the earlier prototype views so new users start clean. */
+
+let contentusRecorder = null;
+let contentusRecordChunks = [];
+let contentusRecordedFile = null;
+
+function loadStateV4() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    return saved ? mergeStateV4(defaultState, saved) : structuredClone(defaultState);
+  } catch {
+    return structuredClone(defaultState);
+  }
+}
+
+function mergeStateV4(base, saved = {}) {
+  const cleanBase = structuredClone(base);
+  const isLegacyDemo = saved.workspaceVersion !== cleanBase.workspaceVersion;
+  const merged = {
+    ...cleanBase,
+    ...saved,
+    workspaceVersion: cleanBase.workspaceVersion,
+    creator: { ...cleanBase.creator, ...(saved.creator || {}) },
+    dna: isLegacyDemo ? null : (saved.dna || null),
+    ideas: isLegacyDemo ? [] : normalizeList(saved.ideas),
+    scripts: isLegacyDemo ? [] : normalizeList(saved.scripts),
+    thumbnails: isLegacyDemo ? [] : normalizeList(saved.thumbnails),
+    calendar: isLegacyDemo ? [] : normalizeList(saved.calendar),
+    inspiration: isLegacyDemo ? [] : normalizeList(saved.inspiration),
+    youtube: isLegacyDemo ? null : (saved.youtube || null),
+    comments: isLegacyDemo ? [] : normalizeList(saved.comments),
+    growthInsights: isLegacyDemo ? [] : normalizeList(saved.growthInsights),
+  };
+
+  if (isLegacyDemo) {
+    merged.creator.creatorName = "";
+    merged.creator.name = "";
+    merged.creator.niche = "";
+    merged.creator.audience = "";
+    merged.creator.platforms = [];
+    merged.creator.tone = [];
+    merged.creator.values = "";
+    merged.creator.boundaries = "";
+    merged.creator.topicsLoved = "";
+    merged.creator.topicsAvoided = "";
+    merged.youtubeConnected = false;
+  }
+
+  return merged;
+}
+
+function normalizeList(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function safeDna() {
+  return state.dna || {
+    score: 0,
+    tone: "",
+    humor: "",
+    phrases: [],
+    story: "",
+    visual: "",
+    themes: [],
+    audienceType: "",
+    editingPace: "",
+    hookStyle: "",
+    language: "",
+    emotional: "",
+    avoid: "",
+    examplesLike: [],
+    examplesUnlike: [],
+  };
+}
+
+function creatorDisplayNameV4() {
+  return state.creator.creatorName || state.creator.name || state.creator.email || "Creator";
+}
+
+function landingViewV4() {
+  const dnaScore = state.dna?.score ? `${state.dna.score}%` : "Build";
+  const authScore = state.lastAuthenticity?.authenticityScore || state.scripts[0]?.authenticityScore || "Ready";
+  const ideaCount = state.ideas.length || "Start";
+  return `
+    <section class="landing-shell pro-landing">
+      <header class="landing-header pro-header">
+        <a href="#/" aria-label="Contentus home">${dnaLogo()}</a>
+        <nav class="landing-nav" aria-label="Landing navigation">
+          <a href="#features">Features</a>
+          <a href="#workflow">Workflow</a>
+          <a href="#chrome-helper">Chrome helper</a>
+          ${state.authed ? `<a href="#/app/dashboard">Dashboard</a><button class="button ghost" data-action="logout" type="button">Sign out</button>` : `<a href="#/login">Sign in</a>`}
+          <a class="button primary" href="${state.authed ? "#/app/dashboard" : "#/login"}">${state.authed ? "Open app" : "Start free"}</a>
+        </nav>
+      </header>
+
+      <section class="landing-hero restored-hero-top">
+        <div class="hero-backdrop" aria-hidden="true">
+          <div class="signal-card signal-card-one">
+            <span>Creator DNA</span>
+            <strong>${dnaScore}</strong>
+            <small>Voice profile</small>
+          </div>
+          <div class="signal-card signal-card-two">
+            <span>Authenticity Guard</span>
+            <strong>${authScore}</strong>
+            <small>Before publish</small>
+          </div>
+          <div class="signal-card signal-card-three">
+            <span>Ideas</span>
+            <strong>${ideaCount}</strong>
+            <small>Ready to create</small>
+          </div>
+        </div>
+        <div class="hero-inner hero-inner-premium">
+          <div class="hero-copy">
+            <p class="eyebrow">Create 10x faster without losing what makes you, you.</p>
+            <h1>Build faster. Stay unmistakably you.</h1>
+            <p class="hero-lede">
+              Contentus learns your voice, protects your originality, and turns ideas into scripts,
+              thumbnails, ads, calendar plans, comment replies, and YouTube growth decisions with Creator DNA baked in.
+            </p>
+            <div class="hero-actions">
+              <a class="button primary" href="${state.authed ? "#/app/dashboard" : "#/login"}">${state.authed ? "Open your studio" : "Create your account"}</a>
+              <a class="button secondary" href="#features">See the system</a>
+            </div>
+            <div class="hero-proof">
+              <span class="chip">Supabase auth</span>
+              <span class="chip">Saved creator state</span>
+              <span class="chip">Gemini AI routes</span>
+              <span class="chip">Chrome helper</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-dashboard-preview" aria-label="Contentus product preview">
+          <div class="preview-topbar">
+            <span class="live-dot"></span>
+            <strong>Contentus studio</strong>
+            <span>Live creator loop</span>
+          </div>
+          <div class="preview-grid">
+            <div class="preview-panel span-2">
+              <small>Idea Engine</small>
+              <strong>No blank page</strong>
+              <p>Generate original angles from your niche, audience, and Creator DNA.</p>
+            </div>
+            <div class="preview-panel">
+              <small>Voice match</small>
+              <strong>${state.dna ? `${state.dna.score}%` : "DNA"}</strong>
+              <p>Build from real samples.</p>
+            </div>
+            <div class="preview-panel">
+              <small>Thumbnail</small>
+              <strong>Canvas</strong>
+              <p>Low-token visual drafts.</p>
+            </div>
+            <div class="preview-panel span-2">
+              <small>YouTube + Growth</small>
+              <strong>Real channel link</strong>
+              <p>Use public stats and comments to choose your next creator move.</p>
+            </div>
+          </div>
+        </div>
+        <a class="scroll-cue-new" href="#features">Scroll for the system</a>
+      </section>
+
+      <section class="landing-section hackathon-story" id="features">
+        <div class="section-heading compact-heading">
+          <p class="section-kicker">Hackathon pitch</p>
+          <h2>Creators need speed, but not at the cost of their voice.</h2>
+          <p class="muted">Contentus is built around one belief: AI should amplify a creator, not flatten them into generic content.</p>
+        </div>
+
+        <div class="story-grid">
+          <article class="story-card story-card-large">
+            <span class="story-number">01</span>
+            <p class="section-kicker">The problem we are trying to solve</p>
+            <h3>Creators are drowning in content pressure.</h3>
+            <p>
+              YouTubers, TikTokers, writers, podcasters, students, and small creators have to brainstorm,
+              script, design thumbnails, repurpose, answer comments, study analytics, and post everywhere.
+              Normal AI makes this faster, but it often sounds generic and risks weakening the creator's identity.
+            </p>
+          </article>
+
+          <article class="story-card">
+            <span class="story-number">02</span>
+            <p class="section-kicker">Our mission</p>
+            <h3>Help creators scale without losing trust.</h3>
+            <p>
+              We want creators to publish faster, stay original, protect their voice, and make better growth
+              decisions without needing a full creative team.
+            </p>
+          </article>
+
+          <article class="story-card">
+            <span class="story-number">03</span>
+            <p class="section-kicker">The solution we made</p>
+            <h3>A personal AI studio powered by Creator DNA.</h3>
+            <p>
+              Contentus learns a creator's tone, audience, topics, boundaries, samples, and optional voice/video
+              context. Then it generates ideas, scripts, thumbnails, ad concepts, comment replies, and growth
+              recommendations that stay aligned with the creator.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="landing-section feature-showcase">
+        <div class="section-heading compact-heading">
+          <p class="section-kicker">The features</p>
+          <h2>Everything a solo creator needs to move from idea to publish.</h2>
+        </div>
+        <div class="feature-grid feature-grid-refined">
+          ${featureCard("Creator DNA Profile", "Build a voice profile from writing samples, uploads, recorded voice, and YouTube video context.")}
+          ${featureCard("AI Idea Engine", "Generate original ideas with hooks, platform fit, emotional angle, generic risk, and personalization tips.")}
+          ${featureCard("Script Builder", "Create length-aware scripts for 30 seconds, 2 minutes, 8 minutes, ads, films, tutorials, and more.")}
+          ${featureCard("Authenticity Guard", "Score whether content sounds like the creator and rewrite drafts that feel too generic.")}
+          ${featureCard("Thumbnail Designer", "Design fast thumbnail drafts locally with low-token title suggestions and PNG export.")}
+          ${featureCard("YouTube + Growth", "Link a public channel, inspect recent videos, load comments, and turn audience signals into next ideas.")}
+          ${featureCard("Community Manager", "Analyze real comments and draft creator-voice replies without auto-posting.")}
+          ${featureCard("Chrome Mini Helper", "Suggest titles, descriptions, rewrites, and authenticity checks from pages the creator is browsing.")}
+        </div>
+      </section>
+
+      <section class="landing-section workflow-band" id="workflow">
+        <div class="section-heading compact-heading">
+          <p class="section-kicker">How it works</p>
+          <h2>Train the voice once. Use it across the whole content workflow.</h2>
+        </div>
+        <div class="workflow-steps workflow-steps-refined">
+          ${["Build Creator DNA", "Generate ideas", "Write scripts", "Design thumbnails", "Check authenticity", "Plan and grow"].map((step, index) => `<div><span>${String(index + 1).padStart(2, "0")}</span><strong>${step}</strong></div>`).join("")}
+        </div>
+        <blockquote>
+          Contentus is your personal AI co-creator that learns your voice, protects your originality, and helps you grow across platforms. It helps creators brainstorm, script, analyze, and publish content faster without becoming generic.
+        </blockquote>
+      </section>
+
+      <section class="landing-section hackathon-proof">
+        <div class="section-heading compact-heading">
+          <p class="section-kicker">Why it matters</p>
+          <h2>Most tools optimize for output. Contentus optimizes for creator identity.</h2>
+        </div>
+        <div class="proof-grid">
+          ${insight("Originality first", "The app warns against copying and pushes every draft toward personal proof, audience fit, and safer claims.")}
+          ${insight("Real saved workspace", "New accounts start blank, then save Creator DNA, ideas, scripts, thumbnails, calendar items, and linked channel data.")}
+          ${insight("Hackathon-ready product", "The dashboard, generators, YouTube linking, community replies, thumbnail designer, and extension are all built into one workflow.")}
+        </div>
+      </section>
+
+      <section class="landing-section helper-bottom helper-bottom-refined" id="chrome-helper">
+        <div>
+          <p class="section-kicker">Chrome helper</p>
+          <h2>A mini creator assistant for the browser.</h2>
+          <p class="muted">Load the extension from the <code>extension</code> folder. It reads the current page title, selected text, and visible context to suggest titles, descriptions, captions, and safer rewrites.</p>
+        </div>
+        <a class="button primary" href="${state.authed ? "#/app/extension" : "#/login"}">Open install guide</a>
+      </section>
+    </section>
+  `;
+}
+
+function authViewV4() {
+  return `
+    <section class="auth-layout restored-auth">
+      <div class="auth-copy">
+        <a href="#/">${dnaLogo()}</a>
+        <p class="eyebrow">Real account storage</p>
+        <h1>Sign in and keep your creator brain intact.</h1>
+        <p class="hero-lede">
+          Contentus uses Supabase Auth when your keys are present. Your Creator DNA,
+          ideas, scripts, thumbnails, calendar, and channel data are saved to your user profile
+          so they come back with you.
+        </p>
+        <div class="hero-proof">
+          <span class="chip">${appConfig.integrations.supabase ? "Supabase connected" : "Supabase not configured"}</span>
+          <span class="chip">${appConfig.integrations.gemini ? "Gemini connected" : "Gemini fallback mode"}</span>
+          <span class="chip">${appConfig.integrations.youtubeData ? "YouTube Data connected" : "YouTube key needed"}</span>
+        </div>
+      </div>
+      <form class="auth-card" id="login-form">
+        <h2>Welcome to Contentus</h2>
+        <p class="muted">${authStatusNoteV4()}</p>
+        <div class="auth-choice-note">
+          <p><strong>New here?</strong> Fill the form and choose <span>Create account</span>.</p>
+          <p><strong>Already saved data?</strong> Use <span>Sign in</span> to restore it.</p>
+        </div>
+        <div class="form-field">
+          <label for="login-name">Creator name <span>optional</span></label>
+          <input id="login-name" placeholder="Your creator or channel name" autocomplete="name">
+        </div>
+        <div class="form-field">
+          <label for="login-email">Email</label>
+          <input id="login-email" type="email" placeholder="creator@example.com" autocomplete="email">
+        </div>
+        <div class="form-field">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" placeholder="At least 6 characters" autocomplete="current-password">
+        </div>
+        <div class="action-row">
+          <button class="button primary" type="button" data-action="login">Sign in</button>
+          <button class="button secondary" type="button" data-action="signup">Create account</button>
+          <a class="button secondary" href="#/">Back</a>
+        </div>
+        <p class="form-note" id="auth-note">New accounts start blank. Your workspace syncs after sign in.</p>
+      </form>
+    </section>
+  `;
+}
+
+function authStatusNoteV4() {
+  if (appConfig.integrations.supabase) return "Supabase is connected. Your workspace will be saved to your account.";
+  return "Supabase is not detected, so this browser can only use local storage until the keys are configured.";
+}
+
+function appShellV4(route) {
+  const page = pageForRouteV4(route);
+  return `
+    <section class="app-shell app-v4">
+      <aside class="sidebar sidebar-v4">
+        <a href="#/app/dashboard">${dnaLogo()}</a>
+        <nav class="sidebar-nav" aria-label="App navigation">
+          ${navLink("/app/dashboard", "dashboard", "Dashboard")}
+          ${navLink("/app/dna", "dna", "Creator DNA")}
+          ${navLink("/app/ideas", "spark", "Idea Engine")}
+          ${navLink("/app/scripts", "script", "Script Builder")}
+          ${navLink("/app/ad-studio", "film", "Ad Studio")}
+          ${navLink("/app/thumbnail", "film", "Thumbnail")}
+          ${navLink("/app/authenticity", "guard", "Authenticity")}
+          ${navLink("/app/youtube-growth", "chart", "YouTube + Growth")}
+          ${navLink("/app/community", "spark", "Community")}
+          ${navLink("/app/calendar", "calendar", "Calendar")}
+          <div class="nav-divider"></div>
+          ${navLink("/app/extension", "spark", "Chrome Helper")}
+        </nav>
+        <div class="sidebar-foot">
+          <strong>${state.authed ? "Signed in" : "Local workspace"}</strong>
+          <p>${state.authed ? "Your real workspace data syncs to Supabase." : "Sign in to save across devices."}</p>
+          <button class="button secondary" data-action="logout" type="button">${state.authed ? "Sign out" : "Back to landing"}</button>
+        </div>
+      </aside>
+
+      <section class="app-main">
+        <header class="app-topbar topbar-v4">
+          <div class="topbar-left">
+            <button class="icon-button mobile-menu" data-action="mobile-menu" type="button" aria-label="Open menu">${icon("menu")}</button>
+            <div class="topbar-title">
+              <h1>${escapeHtml(page.title)}</h1>
+              <p>${escapeHtml(page.subtitle)}</p>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <span class="badge ${state.authed ? "good" : "warn"}">${state.authed ? "Sync ready" : "Local only"}</span>
+            <a class="button primary" href="#/app/ideas">New idea</a>
+          </div>
+        </header>
+        <div class="app-content">${page.html}</div>
+      </section>
+    </section>
+  `;
+}
+
+function pageForRouteV4(route) {
+  const pages = {
+    "/app/dashboard": { title: "Dashboard", subtitle: "Only your real saved data appears here.", html: dashboardPageV4() },
+    "/app/dna": { title: "Creator DNA", subtitle: "Build your voice profile from real samples, audio, or video context.", html: dnaPageV4() },
+    "/app/ideas": { title: "Idea Engine", subtitle: "Generate original ideas from your topic, goal, audience, and DNA.", html: ideasPageV4() },
+    "/app/scripts": { title: "Script Builder", subtitle: "Write length-aware scripts and export formatted PDFs.", html: scriptsPageV4() },
+    "/app/ad-studio": { title: "Ad Studio", subtitle: "Create ads, short films, promos, and campaign concepts.", html: adStudioPageV4() },
+    "/app/thumbnail": { title: "Thumbnail Designer", subtitle: "Design thumbnails locally with optional low-token title help.", html: thumbnailPageV4() },
+    "/app/authenticity": { title: "Authenticity Guard", subtitle: "Check whether content sounds like you before publishing.", html: authenticityPageV4() },
+    "/app/youtube-growth": { title: "YouTube + Growth", subtitle: "Link a public channel and turn performance into next actions.", html: youtubeGrowthPageV4() },
+    "/app/community": { title: "Community Manager", subtitle: "Analyze real comments and create reply drafts in your voice.", html: communityPageV4() },
+    "/app/calendar": { title: "Content Calendar", subtitle: "Plan real ideas, scripts, thumbnails, and publishing days.", html: calendarPageV4() },
+    "/app/extension": { title: "Chrome Helper", subtitle: "Install the browser mini assistant from this project.", html: extensionPageV4() },
+  };
+  return pages[route] || pages["/app/dashboard"];
+}
+
+function dashboardPageV4() {
+  const dna = safeDna();
+  const avgAuth = averageScore(state.scripts.map((script) => script.authenticityScore));
+  const hasData = state.dna || state.ideas.length || state.scripts.length || state.youtube || state.calendar.length;
+  const topVideo = bestVideo();
+  return `
+    <section class="page page-v4">
+      <div class="page-hero compact-hero">
+        <div>
+          <p class="section-kicker">Welcome${state.creator.creatorName ? `, ${escapeHtml(state.creator.creatorName)}` : ""}</p>
+          <h2>${hasData ? "Your creator workspace is live." : "Start with your real creator data."}</h2>
+          <p class="muted">${hasData ? "Everything here comes from your saved workspace, generated outputs, or linked YouTube channel." : "Build Creator DNA, generate your first idea, or link YouTube to populate this dashboard."}</p>
+        </div>
+        <div class="action-row">
+          <a class="button primary" href="#/app/dna">Build DNA</a>
+          <a class="button secondary" href="#/app/youtube-growth">Link YouTube</a>
+        </div>
+      </div>
+
+      <div class="metric-grid metric-grid-v4">
+        ${metric("Creator DNA", state.dna ? `${dna.score}%` : "Not built", state.dna ? "Voice profile saved" : "Add samples", state.dna ? "good" : "warn")}
+        ${metric("Avg authenticity", avgAuth ? `${avgAuth}%` : "No scripts", avgAuth ? "From saved scripts" : "Generate a script", avgAuth ? "good" : "warn")}
+        ${metric("Ideas", String(state.ideas.length), state.ideas.length ? "Saved in workspace" : "No ideas yet", state.ideas.length ? "good" : "warn")}
+        ${metric("Calendar", String(state.calendar.length), burnoutLabel(), state.calendar.length > 8 ? "warn" : "good")}
+      </div>
+
+      ${!hasData ? emptyOnboarding() : `
+        <div class="dashboard-grid dashboard-grid-v4">
+          <article class="dashboard-card">
+            <div class="card-topline">
+              <div><span class="section-kicker">Next action</span><h3>Keep the loop moving</h3></div>
+            </div>
+            <div class="quick-actions slim-actions">
+              ${quickAction("/app/ideas", "Generate idea", "Start from a topic")}
+              ${quickAction("/app/scripts", "Write script", "Turn selected idea into a script")}
+              ${quickAction("/app/thumbnail", "Design thumbnail", "Create a visual direction")}
+              ${quickAction("/app/authenticity", "Check voice", "Score a draft")}
+            </div>
+          </article>
+
+          <article class="dashboard-card">
+            <div class="card-topline">
+              <div><span class="section-kicker">Recent ideas</span><h3>${state.ideas.length ? "Saved ideas" : "No ideas yet"}</h3></div>
+              <a class="text-link" href="#/app/ideas">Open</a>
+            </div>
+            <div class="list-stack">
+              ${state.ideas.slice(0, 4).map((idea) => insight(idea.title, idea.hook || idea.concept || "Ready for scripting.")).join("") || emptyMini("Generate your first idea from the Idea Engine.")}
+            </div>
+          </article>
+
+          <article class="dashboard-card">
+            <div class="card-topline">
+              <div><span class="section-kicker">YouTube</span><h3>${state.youtube?.channel?.title || "No channel linked"}</h3></div>
+              <a class="text-link" href="#/app/youtube-growth">Open</a>
+            </div>
+            ${state.youtube ? youtubeSummaryCard(topVideo) : emptyMini("Link a public YouTube channel to show real videos, views, and comment tools.")}
+          </article>
+
+          <article class="dashboard-card">
+            <div class="card-topline">
+              <div><span class="section-kicker">Calendar</span><h3>Upcoming work</h3></div>
+              <a class="text-link" href="#/app/calendar">Open</a>
+            </div>
+            <div class="list-stack">
+              ${state.calendar.slice(0, 4).map((item) => insight(item.title, `${item.platform || "Content"} - ${item.status || "idea"} - ${item.date || `day ${item.day || ""}`}`)).join("") || emptyMini("Save an idea or script to the calendar when it is ready.")}
+            </div>
+          </article>
+        </div>
+      `}
+    </section>
+  `;
+}
+
+function emptyOnboarding() {
+  return `
+    <div class="empty-dashboard">
+      <article>
+        <span class="step-dot">1</span>
+        <h3>Build Creator DNA</h3>
+        <p>Upload, record, paste, or link real creator samples so Contentus has your voice.</p>
+        <a class="button primary" href="#/app/dna">Start DNA</a>
+      </article>
+      <article>
+        <span class="step-dot">2</span>
+        <h3>Generate an idea</h3>
+        <p>Pick a platform, goal, content type, or custom option and create your first angle.</p>
+        <a class="button secondary" href="#/app/ideas">Idea Engine</a>
+      </article>
+      <article>
+        <span class="step-dot">3</span>
+        <h3>Link YouTube</h3>
+        <p>Use a public channel URL or handle to fetch real recent videos and comments.</p>
+        <a class="button secondary" href="#/app/youtube-growth">Connect channel</a>
+      </article>
+    </div>
+  `;
+}
+
+function dnaPageV4() {
+  const dna = safeDna();
+  return `
+    <section class="page page-v4">
+      <div class="page-hero compact-hero">
+        <div>
+          <p class="section-kicker">Creator DNA</p>
+          <h2>Build the profile from real samples.</h2>
+          <p class="muted">Contentus can analyze writing, transcripts, text files, audio/video uploads, a recorded voice note, and YouTube video context.</p>
+        </div>
+        <div class="action-row">
+          <button class="button primary" data-action="v4-analyze-dna" type="button">Generate Creator DNA</button>
+          <button class="button secondary" data-action="v4-save-dna" type="button">Save</button>
+        </div>
+      </div>
+
+      <div class="workspace-layout">
+        <form class="tool-card compact-form" id="dna-form">
+          <div class="form-grid">
+            ${fieldV4("creator-name", "Creator name", state.creator.creatorName, "text", "Your name, channel, or brand")}
+            ${fieldV4("niche", "Niche", state.creator.niche, "text", "Student creator, beauty, comedy, film, etc.")}
+            ${textareaV4("audience", "Audience", state.creator.audience, "Who watches you and what do they care about?", "full")}
+            ${textareaV4("values", "Values and boundaries", state.creator.values, "What should your content stand for or never do?", "full")}
+            ${textareaV4("topics-loved", "Topics you love", state.creator.topicsLoved, "Separate with commas")}
+            ${textareaV4("topics-avoided", "Topics you avoid", state.creator.topicsAvoided, "Separate with commas")}
+            <div class="form-field full">
+              <label>Tone signals</label>
+              <div class="toggle-group">
+                ${["funny", "educational", "cinematic", "emotional", "sarcastic", "professional", "chaotic", "motivational", "calm", "bold"].map((tone) => `<button class="pill-button ${state.creator.tone.includes(tone) ? "active" : ""}" type="button" data-action="toggle-pill">${tone}</button>`).join("")}
+              </div>
+            </div>
+            ${textareaV4("samples", "Writing samples or transcript", "", "Paste captions, scripts, posts, transcripts, or rough notes.", "full")}
+            ${fieldV4("dna-youtube-url", "YouTube video URL", "", "url", "Optional: public video URL, channel video, or handle")}
+            <div class="form-field">
+              <label for="voice-file">Upload sample</label>
+              <input id="voice-file" type="file" accept="audio/*,video/*,.txt,.md,.srt,.vtt">
+              <small>Audio/video/text. Large files are trimmed before analysis.</small>
+            </div>
+            <div class="form-field recorder-box">
+              <label>Record voice sample</label>
+              <div class="action-row compact-actions">
+                <button class="button secondary" type="button" data-action="v4-start-recording">Record</button>
+                <button class="button secondary" type="button" data-action="v4-stop-recording">Stop</button>
+              </div>
+              <small id="recording-status">No recording yet.</small>
+            </div>
+          </div>
+        </form>
+
+        <aside class="dashboard-card sticky-output" id="dna-output">
+          ${dna.score ? dnaOutputV4(dna) : emptyPanel("No Creator DNA yet", "Add samples and generate your profile. The dashboard stays blank until you do.", "Builds from real creator input only.")}
+        </aside>
+      </div>
+    </section>
+  `;
+}
+
+function dnaOutputV4(dna) {
+  return `
+    <div class="card-topline">
+      <div><span class="section-kicker">Generated profile</span><h3>DNA score ${escapeHtml(dna.score || 0)}%</h3></div>
+      <span class="badge ${Number(dna.score) > 80 ? "good" : "warn"}">${Number(dna.score) > 80 ? "Ready" : "Needs samples"}</span>
+    </div>
+    <div class="list-stack profile-list">
+      ${insight("Tone of voice", dna.tone || "Not enough data yet.")}
+      ${insight("Hook style", dna.hookStyle || "Not enough data yet.")}
+      ${insight("Storytelling style", dna.story || "Not enough data yet.")}
+      ${insight("Humor style", dna.humor || "Not enough data yet.")}
+      ${insight("Visual style", dna.visual || "Not enough data yet.")}
+      ${insight("Common phrases", toTextList(dna.phrases))}
+      ${insight("Things to avoid", dna.avoid || state.creator.topicsAvoided || "Not enough data yet.")}
+      ${insight("Sounds like you", toTextList(dna.examplesLike))}
+      ${insight("Does not sound like you", toTextList(dna.examplesUnlike))}
+      ${dna.mediaNote ? insight("Media note", dna.mediaNote) : ""}
+    </div>
+  `;
+}
+
+function ideasPageV4() {
+  return `
+    <section class="page page-v4">
+      <div class="builder-layout">
+        <form class="tool-card compact-form" id="ideas-form">
+          <div class="card-topline">
+            <div><span class="section-kicker">Idea Engine</span><h3>Generate from your actual direction</h3></div>
+          </div>
+          ${fieldV4("idea-topic", "Topic", "", "text", "What do you want to create about?")}
+          ${selectCustom("idea-platform", "Platform", ["YouTube", "TikTok/Reel/Short", "Instagram", "Newsletter", "Blog", "Podcast", "LinkedIn", "X/Twitter", "Custom"])}
+          ${selectCustom("idea-goal", "Goal", ["grow followers", "educate", "entertain", "sell product", "build trust", "go viral", "start conversation", "Custom"])}
+          ${selectCustom("idea-type", "Content type", ["YouTube video", "TikTok/Reel/Short", "Instagram carousel", "newsletter", "blog", "podcast", "ad", "short film", "Custom"])}
+          ${selectCustom("idea-tone", "Tone", ["Use Creator DNA", "funny", "educational", "cinematic", "emotional", "professional", "Custom"])}
+          ${selectCustom("idea-length", "Length", ["30 seconds", "60 seconds", "2 minutes", "5 minutes", "8 minutes", "Custom"])}
+          ${selectCustom("idea-trend", "Trend use", ["No trend", "Use current platform trend carefully", "Custom"])}
+          ${selectCustom("idea-story", "Personal story", ["Use DNA if relevant", "Yes", "No", "Custom"])}
+          ${textareaV4("idea-audience", "Audience notes", state.creator.audience, "Specific audience context")}
+          <button class="button primary full-width" type="button" data-action="v4-generate-ideas">Generate ideas</button>
+        </form>
+
+        <section class="output-column">
+          <div class="card-topline">
+            <div><span class="section-kicker">Output</span><h3>${state.ideas.length ? "Saved ideas" : "No ideas yet"}</h3></div>
+          </div>
+          <div id="ideas-output" class="idea-list">
+            ${state.ideas.length ? state.ideas.map(ideaCardV4).join("") : emptyPanel("Your ideas will appear here", "Generate ideas from your topic and Creator DNA. Nothing is pre-filled.", "Every result includes authenticity score, generic risk, and a personalization tip.")}
+          </div>
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function ideaCardV4(idea) {
+  return `
+    <article class="dashboard-card idea-card-v4">
+      <div class="card-topline">
+        <div><span class="section-kicker">${escapeHtml(idea.platform || "Content")}</span><h3>${escapeHtml(idea.title || "Untitled idea")}</h3></div>
+        <span class="badge ${riskClass(idea.genericRisk)}">${escapeHtml(idea.genericRisk || "Low risk")}</span>
+      </div>
+      <p class="hook-line">${escapeHtml(idea.hook || "")}</p>
+      <div class="score-grid">
+        ${scoreChip("Authenticity", `${idea.authenticityScore || idea.authenticity || "?"}%`)}
+        ${scoreChip("Platform fit", idea.platformFit || idea.platform || "Custom")}
+        ${scoreChip("Emotion", idea.emotional || idea.emotionalAngle || "Audience-first")}
+      </div>
+      <div class="list-stack">
+        ${insight("Concept", idea.concept || "")}
+        ${insight("Why audience cares", idea.why || idea.whyAudienceCares || "")}
+        ${insight("Make it personal", idea.personalizationTip || idea.personalTip || "")}
+        ${insight("CTA", idea.cta || "")}
+      </div>
+      <div class="action-row">
+        <button class="button primary" type="button" data-action="v4-use-idea" data-idea-id="${escapeHtml(idea.id)}">Use in script</button>
+        <button class="button secondary" type="button" data-action="v4-save-idea-calendar" data-idea-id="${escapeHtml(idea.id)}">Save to calendar</button>
+      </div>
+    </article>
+  `;
+}
+
+function scriptsPageV4() {
+  const latest = state.scripts[0];
+  return `
+    <section class="page page-v4">
+      <div class="builder-layout script-builder-layout">
+        <form class="tool-card compact-form script-options" id="script-form">
+          <div class="card-topline">
+            <div><span class="section-kicker">Script Builder</span><h3>Compact controls</h3></div>
+          </div>
+          ${selectCustom("script-idea", "Idea", ideaOptions(), state.selectedIdeaId || "Custom")}
+          ${fieldV4("script-custom-idea", "Custom idea", "", "text", "Used when Idea is custom")}
+          ${selectCustom("script-platform", "Platform", ["YouTube", "TikTok/Reel/Short", "Instagram", "Podcast", "Ad", "Short film", "Custom"])}
+          ${selectCustom("script-length", "Length", ["30 seconds", "60 seconds", "2 minutes", "5 minutes", "8 minutes", "Custom"])}
+          ${selectCustom("script-format", "Format", ["talking head", "vlog", "cinematic", "tutorial", "skit", "documentary", "product review", "ad", "short film", "Custom"])}
+          ${selectCustom("script-tone", "Tone", ["Use Creator DNA", "funny", "emotional", "cinematic", "direct", "Custom"])}
+          ${fieldV4("script-audience", "Audience", state.creator.audience, "text", "Who is this for?")}
+          <button class="button primary full-width" type="button" data-action="v4-generate-script">Generate script</button>
+        </form>
+
+        <section class="script-workspace">
+          <div class="card-topline">
+            <div><span class="section-kicker">Script output</span><h3>${latest?.title ? escapeHtml(latest.title) : "No script yet"}</h3></div>
+            ${latest ? `<button class="button secondary" type="button" data-action="v4-download-script">Download PDF</button>` : ""}
+          </div>
+          <div id="script-output">
+            ${latest ? scriptOutputV4(latest) : emptyPanel("Generate your first script", "Choose an idea or custom concept. The script length changes based on your selected duration.", "PDF export creates a formatted script document.")}
+          </div>
+          ${latest ? scriptButtonsV4() : ""}
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function scriptButtonsV4() {
+  return `
+    <div class="tool-button-strip">
+      ${["Make more like me", "Make shorter", "Make funnier", "Make more emotional", "Make more cinematic", "Make less generic"].map((label) => `<button class="button secondary" type="button" data-action="v4-transform-script" data-transform="${escapeHtml(label)}">${label}</button>`).join("")}
+      <button class="button primary" type="button" data-action="v4-run-auth-from-script">Run Authenticity Guard</button>
+      <button class="button secondary" type="button" data-action="v4-save-script-calendar">Save to calendar</button>
+    </div>
+  `;
+}
+
+function scriptOutputV4(script) {
+  return `
+    <article class="dashboard-card script-output-card">
+      <div class="score-grid">
+        ${scoreChip("Authenticity", `${script.authenticityScore || "?"}%`)}
+        ${scoreChip("Generic risk", script.genericRisk || "Low")}
+        ${scoreChip("Length", script.lengthLabel || script.targetLength || "Custom")}
+        ${scoreChip("Disclosure", script.disclosure || "AI-assisted if used")}
+      </div>
+      ${sectionBlock("Hook options", listText(script.hookOptions))}
+      ${sectionBlock("Full script", script.script)}
+      ${sectionBlock("Scene-by-scene", listText(script.scenes || script.sceneBreakdown))}
+      ${sectionBlock("Voiceover", script.voiceover)}
+      ${sectionBlock("Shot list", listText(script.shotList))}
+      ${sectionBlock("B-roll", listText(script.broll || script.bRollSuggestions))}
+      ${sectionBlock("On-screen text", listText(script.onScreenText))}
+      ${sectionBlock("Caption", script.caption)}
+      ${sectionBlock("Hashtags", listText(script.hashtags))}
+      ${sectionBlock("Ending options", listText(script.endingOptions))}
+      ${sectionBlock("Personalization tip", script.personalizationTip)}
+    </article>
+  `;
+}
+
+function adStudioPageV4() {
+  const latest = state.adProjects?.[0];
+  return `
+    <section class="page page-v4">
+      <div class="builder-layout">
+        <form class="tool-card compact-form" id="ad-form">
+          <div class="card-topline"><div><span class="section-kicker">Ad and film</span><h3>Project controls</h3></div></div>
+          ${selectCustom("ad-project-type", "Project type", ["advertisement", "short film", "product promo", "personal brand trailer", "social cause campaign", "mock brand collaboration", "Custom"])}
+          ${textareaV4("ad-idea", "Product or story idea", "", "What is the product, cause, or story?", "full")}
+          ${fieldV4("ad-audience", "Target audience", state.creator.audience, "text", "Who should care?")}
+          ${selectCustom("ad-mood", "Mood", ["funny", "emotional", "cinematic", "dramatic", "inspirational", "mysterious", "fast-paced", "Custom"])}
+          ${selectCustom("ad-length", "Length", ["15 seconds", "30 seconds", "60 seconds", "2 minutes", "Custom"])}
+          ${selectCustom("ad-platform", "Platform", ["YouTube", "TikTok/Reel/Short", "Instagram", "LinkedIn", "Custom"])}
+          ${fieldV4("ad-message", "Core message", "", "The one thing people should remember")}
+          ${fieldV4("ad-cta", "CTA", "", "What should people do next?")}
+          ${fieldV4("ad-language", "Language", "English", "text", "English, Hindi, Hinglish, etc.")}
+          <button class="button primary full-width" type="button" data-action="v4-generate-ad">Generate project</button>
+        </form>
+        <section class="output-column">
+          <div id="ad-output">${latest ? adOutputV4(latest) : emptyPanel("No ad or film project yet", "Generate a real concept from your product, story, audience, and Creator DNA.", "Outputs include emotional, funny, and cinematic versions.")}</div>
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function adOutputV4(project) {
+  const versions = normalizeList(project.versions);
+  return `
+    <article class="dashboard-card">
+      <div class="card-topline">
+        <div><span class="section-kicker">Generated project</span><h3>${escapeHtml(project.title || project.concept || "Ad project")}</h3></div>
+        <span class="badge good">${escapeHtml(project.recommendedVersion || project.recommended || "Recommended")}</span>
+      </div>
+      ${sectionBlock("Concept", project.concept)}
+      ${sectionBlock("Script", project.script)}
+      ${sectionBlock("Scene list", listText(project.sceneList || project.scenes))}
+      ${sectionBlock("Shot list", listText(project.shotList))}
+      ${sectionBlock("Storyboard", listText(project.storyboard || project.storyboardText))}
+      ${sectionBlock("Voiceover", project.voiceover)}
+      ${sectionBlock("Visual prompts", listText(project.visualPrompts))}
+      ${sectionBlock("Caption", project.caption)}
+      ${sectionBlock("Thumbnail text", project.thumbnailText)}
+      ${sectionBlock("AI disclosure line", project.disclosure || project.aiDisclosureLine)}
+      <div class="comparison-grid">
+        ${versions.map((version) => `
+          <div class="comparison-card">
+            <span class="section-kicker">${escapeHtml(version.name || version.version || "Version")}</span>
+            <strong>${escapeHtml(version.bestForPlatform || version.platform || "Platform fit")}</strong>
+            <p>${escapeHtml(version.concept || version.script || "")}</p>
+            <div class="score-grid">
+              ${scoreChip("Authenticity", `${version.authenticityScore || version.authenticity || "?"}%`)}
+              ${scoreChip("Viral", version.viralPotential || "Medium")}
+              ${scoreChip("Risk", version.riskLevel || "Low")}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function thumbnailPageV4() {
+  return `
+    <section class="page page-v4">
+      <div class="builder-layout thumbnail-layout">
+        <form class="tool-card compact-form" id="thumbnail-form">
+          <div class="card-topline"><div><span class="section-kicker">Thumbnail Designer</span><h3>Canvas-first, low-token</h3></div></div>
+          ${selectCustom("thumb-idea", "Idea", ideaOptions(), state.selectedIdeaId || "Custom")}
+          ${fieldV4("thumb-title", "Main text", selectedIdea()?.title || "", "text", "Big thumbnail text")}
+          ${fieldV4("thumb-subtitle", "Support text", "", "text", "Optional small text")}
+          ${selectCustom("thumb-style", "Style", ["clean proof", "bold challenge", "cinematic", "tutorial", "reaction", "Custom"])}
+          ${selectCustom("thumb-palette", "Palette", ["cyan coral gold", "lime blue white", "red yellow black", "white teal charcoal", "Custom"])}
+          ${selectCustom("thumb-layout", "Layout", ["big text left", "split text visual", "center impact", "minimal", "Custom"])}
+          <div class="action-row compact-actions">
+            <button class="button primary" type="button" data-action="v4-generate-thumbnail">Generate thumbnail</button>
+            <button class="button secondary" type="button" data-action="v4-thumbnail-copy">Suggest title text</button>
+          </div>
+          <button class="button secondary full-width" type="button" data-action="v4-download-thumbnail">Download PNG</button>
+        </form>
+        <section class="thumbnail-stage">
+          <canvas id="thumbnail-canvas" width="1280" height="720" aria-label="Generated thumbnail preview"></canvas>
+          <div id="thumbnail-copy-output" class="dashboard-card mini-output">${emptyMini("Optional AI copy suggestions will appear here.")}</div>
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function authenticityPageV4() {
+  const result = state.lastAuthenticity;
+  return `
+    <section class="page page-v4">
+      <div class="authenticity-grid">
+        <form class="tool-card authenticity-input-card" id="auth-form-v4">
+          <div class="card-topline"><div><span class="section-kicker">Authenticity Guard</span><h3>Paste a draft</h3></div></div>
+          <textarea id="auth-input" placeholder="Paste script, caption, ad copy, or a generated draft here."></textarea>
+          <button class="button primary" type="button" data-action="v4-score-auth">Score authenticity</button>
+        </form>
+        <section id="auth-output" class="auth-output-v4">
+          ${result ? authOutputV4(result) : emptyPanel("No score yet", "Paste content and Contentus will compare it against your Creator DNA.", "Scores include voice match, generic risk, originality, audience fit, believability, and brand safety.")}
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function authOutputV4(result) {
+  const score = result.authenticityScore || result.score || 0;
+  return `
+    <article class="dashboard-card guard-result-card">
+      <div class="guard-score">
+        <span>Authenticity Score</span>
+        <strong>${escapeHtml(score)}</strong>
+        <small>${escapeHtml(result.label || "Needs review")}</small>
+      </div>
+      <div class="score-grid">
+        ${scoreChip("Voice", `${result.voiceMatch || result.voice || "?"}%`)}
+        ${scoreChip("Tone", `${result.toneMatch || result.tone || "?"}%`)}
+        ${scoreChip("Audience", `${result.audienceFit || result.audience || "?"}%`)}
+        ${scoreChip("Originality", `${result.originalityScore || result.originality || "?"}%`)}
+        ${scoreChip("Generic risk", result.genericRisk || result.risk || "?")}
+        ${scoreChip("Brand safety", `${result.brandSafety || result.safety || "?"}%`)}
+      </div>
+      ${sectionBlock("Feedback", result.feedback)}
+      ${sectionBlock("What to fix", listText(result.suggestions || result.tips))}
+      ${sectionBlock("Rewritten version", result.rewrittenVersion || result.rewrite)}
+      ${sectionBlock("Disclosure", result.disclosureRecommendation || result.disclosure)}
+    </article>
+  `;
+}
+
+function youtubeGrowthPageV4() {
+  const yt = state.youtube;
+  const videos = normalizeList(yt?.videos || yt?.recentVideos);
+  return `
+    <section class="page page-v4">
+      <div class="page-hero compact-hero">
+        <div>
+          <p class="section-kicker">YouTube + Growth</p>
+          <h2>${yt?.channel?.title || "Link your public channel"}</h2>
+          <p class="muted">Use a channel URL, @handle, or video URL. Public stats and comments work with your YouTube Data API key. Private Analytics like retention/CTR require Google OAuth keys.</p>
+        </div>
+        <form class="inline-connect" id="youtube-form">
+          <input id="youtube-input" placeholder="@handle, channel URL, or video URL">
+          <button class="button primary" type="button" data-action="v4-link-youtube">Link channel</button>
+        </form>
+      </div>
+
+      ${yt ? `
+        <div class="metric-grid metric-grid-v4">
+          ${metric("Subscribers", formatNumber(yt.channel?.subscribers), "Public channel stat", "good")}
+          ${metric("Total views", formatNumber(yt.channel?.views), "Public channel stat", "good")}
+          ${metric("Videos fetched", String(videos.length), "Recent uploads", "good")}
+          ${metric("Comments loaded", String(state.comments.length), "From selected videos", state.comments.length ? "good" : "warn")}
+        </div>
+        <div class="dashboard-grid dashboard-grid-v4">
+          <article class="dashboard-card span-2">
+            <div class="card-topline"><div><span class="section-kicker">Recent videos</span><h3>Public performance</h3></div></div>
+            ${videos.length ? barChart(videoChartValues(videos), videos.map((_, index) => index + 1)) : emptyMini("No recent public videos found.")}
+            <div class="video-table">
+              ${videos.map((video) => videoRowV4(video)).join("")}
+            </div>
+          </article>
+          <article class="dashboard-card">
+            <div class="card-topline"><div><span class="section-kicker">Growth coach</span><h3>Recommendations</h3></div></div>
+            <div class="list-stack">
+              ${growthInsightsFromVideos(videos).map((item) => insight(item.title, item.text)).join("")}
+            </div>
+          </article>
+        </div>
+      ` : emptyPanel("No YouTube channel linked", "Paste your public YouTube handle, channel URL, or video URL to fetch real channel/video data.", "Private watch time, retention, and CTR require Google OAuth credentials.")}
+    </section>
+  `;
+}
+
+function videoRowV4(video) {
+  return `
+    <div class="video-row">
+      ${video.thumbnail ? `<img src="${escapeHtml(video.thumbnail)}" alt="">` : `<span class="thumb-placeholder"></span>`}
+      <div>
+        <strong>${escapeHtml(video.title || "Untitled video")}</strong>
+        <small>${formatNumber(video.views)} views - ${formatNumber(video.likes)} likes - ${formatNumber(video.comments)} comments</small>
+      </div>
+      <button class="button secondary" type="button" data-action="v4-load-comments" data-video-id="${escapeHtml(video.id)}">Load comments</button>
+    </div>
+  `;
+}
+
+function communityPageV4() {
+  const commentsList = normalizeList(state.comments);
+  return `
+    <section class="page page-v4">
+      <div class="page-hero compact-hero">
+        <div>
+          <p class="section-kicker">Community Manager</p>
+          <h2>${commentsList.length ? "Real comments loaded" : "Load comments from YouTube first"}</h2>
+          <p class="muted">Contentus drafts replies in your voice. It does not auto-post without explicit OAuth and posting permissions.</p>
+        </div>
+        <div class="action-row">
+          <a class="button secondary" href="#/app/youtube-growth">Choose video</a>
+          <button class="button primary" type="button" data-action="v4-generate-replies" ${commentsList.length ? "" : "disabled"}>Generate reply drafts</button>
+        </div>
+      </div>
+      <div class="dashboard-grid dashboard-grid-v4" id="comments-output">
+        ${commentsList.length ? commentsList.map(commentCardV4).join("") : emptyPanel("No comments yet", "Open YouTube + Growth, link a channel, then load comments from a video.", "Reply drafts are generated after comments are loaded.")}
+      </div>
+    </section>
+  `;
+}
+
+function commentCardV4(comment) {
+  return `
+    <article class="dashboard-card comment-card">
+      <div class="card-topline">
+        <div><span class="section-kicker">${escapeHtml(comment.sentiment || "comment")}</span><h3>${escapeHtml(comment.author || "Viewer")}</h3></div>
+        <span class="badge ${comment.sentiment === "toxic" ? "bad" : comment.sentiment === "critical" ? "warn" : "good"}">${escapeHtml(comment.importance || "normal")}</span>
+      </div>
+      <p>${escapeHtml(comment.text || comment.commentText || "")}</p>
+      ${comment.suggestedReply ? sectionBlock("Suggested reply", comment.suggestedReply) : ""}
+      <div class="action-row">
+        <button class="button secondary" type="button" data-action="copy" data-copy="${escapeHtml(comment.suggestedReply || "")}">Copy reply</button>
+        <button class="button secondary" type="button" data-action="v4-comment-to-idea" data-comment-id="${escapeHtml(comment.id)}">Turn into idea</button>
+      </div>
+    </article>
+  `;
+}
+
+function calendarPageV4() {
+  const items = normalizeList(state.calendar);
+  const days = Array.from({ length: 30 }, (_, index) => index + 1);
+  return `
+    <section class="page page-v4">
+      <div class="page-hero compact-hero">
+        <div>
+          <p class="section-kicker">Content Calendar</p>
+          <h2>${items.length ? `${items.length} planned items` : "Plan from real ideas and scripts"}</h2>
+          <p class="muted">${burnoutLabel()}</p>
+        </div>
+        <button class="button primary" type="button" data-action="v4-weekly-plan">Generate weekly plan</button>
+      </div>
+      <div class="calendar-grid calendar-v4">
+        ${days.map((day) => `
+          <div class="calendar-day" data-day="${day}">
+            <strong>${day}</strong>
+            ${items.filter((item) => Number(item.day) === day).map((item) => `
+              <article class="calendar-item" draggable="true" data-calendar-id="${escapeHtml(item.id)}">
+                <span>${escapeHtml(item.platform || "Content")}</span>
+                <p>${escapeHtml(item.title)}</p>
+                <small>${escapeHtml(item.status || "idea")}</small>
+              </article>
+            `).join("")}
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function extensionPageV4() {
+  return `
+    <section class="page page-v4">
+      <div class="page-hero compact-hero">
+        <div>
+          <p class="section-kicker">Chrome mini helper</p>
+          <h2>Install from the project folder.</h2>
+          <p class="muted">The extension can read the active page title and selected text, then suggest titles, descriptions, captions, and authenticity checks.</p>
+        </div>
+      </div>
+      <div class="dashboard-grid dashboard-grid-v4">
+        <article class="dashboard-card">
+          <h3>Load unpacked</h3>
+          <div class="list-stack">
+            ${insight("Open Chrome extensions", "Go to chrome://extensions and enable Developer mode.")}
+            ${insight("Load the folder", "Choose C:\\Users\\mitta\\Documents\\Contentus\\extension.")}
+            ${insight("Pin Contentus", "Open any YouTube video, article, or draft and click the extension.")}
+          </div>
+        </article>
+        <article class="dashboard-card">
+          <h3>Mini helper abilities</h3>
+          <div class="list-stack">
+            ${insight("Suggest titles", "Uses page context and selected text to generate safer title angles.")}
+            ${insight("Generate descriptions", "Creates YouTube and platform descriptions from the current page idea.")}
+            ${insight("Make it mine", "Rewrites highlighted text as inspiration, not copying.")}
+            ${insight("Authenticity check", "Scores selected drafts for generic language and voice fit.")}
+          </div>
+        </article>
+      </div>
+    </section>
+  `;
+}
+
+document.addEventListener("change", (event) => {
+  const select = event.target.closest("[data-custom-select]");
+  if (select) {
+    const input = document.querySelector(`#${select.dataset.customSelect}-custom`);
+    if (input) input.hidden = select.value !== "Custom";
+  }
+});
+
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-action]");
+  if (!button) return;
+  const action = button.dataset.action;
+  if (!action.startsWith("v4-")) return;
+
+  if (action === "v4-analyze-dna") return handleAnalyzeDnaV4(button);
+  if (action === "v4-save-dna") return handleSaveDnaV4();
+  if (action === "v4-start-recording") return startVoiceRecording(button);
+  if (action === "v4-stop-recording") return stopVoiceRecording();
+  if (action === "v4-generate-ideas") return handleGenerateIdeasV4(button);
+  if (action === "v4-use-idea") return handleUseIdeaV4(button.dataset.ideaId);
+  if (action === "v4-save-idea-calendar") return saveIdeaToCalendar(button.dataset.ideaId);
+  if (action === "v4-generate-script") return handleGenerateScriptV4(button);
+  if (action === "v4-transform-script") return handleTransformScriptV4(button);
+  if (action === "v4-run-auth-from-script") return runAuthFromScriptV4();
+  if (action === "v4-save-script-calendar") return saveScriptToCalendar();
+  if (action === "v4-download-script") return downloadLatestScriptPdf();
+  if (action === "v4-generate-ad") return handleGenerateAdV4(button);
+  if (action === "v4-generate-thumbnail") return generateThumbnailCanvas();
+  if (action === "v4-thumbnail-copy") return handleThumbnailCopy(button);
+  if (action === "v4-download-thumbnail") return downloadThumbnailPng();
+  if (action === "v4-score-auth") return handleScoreAuthenticityV4(button);
+  if (action === "v4-link-youtube") return handleLinkYouTubeV4(button);
+  if (action === "v4-load-comments") return handleLoadCommentsV4(button);
+  if (action === "v4-generate-replies") return handleGenerateRepliesV4(button);
+  if (action === "v4-comment-to-idea") return commentToIdea(button.dataset.commentId);
+  if (action === "v4-weekly-plan") return handleWeeklyPlanV4(button);
+});
+
+async function handleAnalyzeDnaV4(button) {
+  await withBusy(button, "Analyzing...", async () => {
+    const tones = [...document.querySelectorAll(".pill-button.active")].map((node) => node.textContent.trim());
+    const file = document.querySelector("#voice-file")?.files?.[0] || contentusRecordedFile;
+    let sampleText = document.querySelector("#samples")?.value || "";
+    let media = null;
+
+    if (file) {
+      if (/text|markdown|vtt|srt/i.test(file.type) || /\.(txt|md|vtt|srt)$/i.test(file.name)) {
+        sampleText = `${sampleText}\n\n${await file.text()}`.trim();
+      } else {
+        media = await fileToBase64(file);
+      }
+    }
+
+    state.creator.creatorName = document.querySelector("#creator-name")?.value.trim() || "";
+    state.creator.niche = document.querySelector("#niche")?.value.trim() || "";
+    state.creator.audience = document.querySelector("#audience")?.value.trim() || "";
+    state.creator.values = document.querySelector("#values")?.value.trim() || "";
+    state.creator.topicsLoved = document.querySelector("#topics-loved")?.value.trim() || "";
+    state.creator.topicsAvoided = document.querySelector("#topics-avoided")?.value.trim() || "";
+    state.creator.tone = tones;
+
+    const result = await apiJson("/api/ai/dna", {
+      method: "POST",
+      body: {
+        creator: state.creator,
+        samples: sampleText,
+        youtubeUrl: document.querySelector("#dna-youtube-url")?.value.trim() || "",
+        media,
+      },
+    });
+
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Creator DNA analysis failed.");
+      return;
+    }
+
+    state.dna = normalizeDnaResult(result.data.dna || result.data);
+    saveState();
+    document.querySelector("#dna-output").innerHTML = dnaOutputV4(safeDna());
+    toast("Creator DNA generated from your input.");
+  });
+}
+
+function handleSaveDnaV4() {
+  saveState();
+  toast("Creator DNA saved.");
+}
+
+async function startVoiceRecording(button) {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    contentusRecordChunks = [];
+    contentusRecorder = new MediaRecorder(stream);
+    contentusRecorder.ondataavailable = (event) => {
+      if (event.data.size) contentusRecordChunks.push(event.data);
+    };
+    contentusRecorder.onstop = () => {
+      const blob = new Blob(contentusRecordChunks, { type: "audio/webm" });
+      contentusRecordedFile = new File([blob], `contentus-voice-${Date.now()}.webm`, { type: "audio/webm" });
+      stream.getTracks().forEach((track) => track.stop());
+      const status = document.querySelector("#recording-status");
+      if (status) status.textContent = "Voice sample recorded and ready.";
+    };
+    contentusRecorder.start();
+    const status = document.querySelector("#recording-status");
+    if (status) status.textContent = "Recording...";
+    toast("Recording started.");
+  } catch (error) {
+    toast(`Recording unavailable: ${error.message}`);
+  }
+}
+
+function stopVoiceRecording() {
+  if (contentusRecorder?.state === "recording") {
+    contentusRecorder.stop();
+    toast("Recording stopped.");
+  }
+}
+
+async function handleGenerateIdeasV4(button) {
+  await withBusy(button, "Generating...", async () => {
+    const payload = {
+      topic: document.querySelector("#idea-topic")?.value.trim(),
+      platform: customValue("idea-platform"),
+      goal: customValue("idea-goal"),
+      contentType: customValue("idea-type"),
+      tone: customValue("idea-tone"),
+      length: customValue("idea-length"),
+      trend: customValue("idea-trend"),
+      story: customValue("idea-story"),
+      audience: document.querySelector("#idea-audience")?.value.trim(),
+      creator: state.creator,
+      dna: state.dna,
+    };
+    if (!payload.topic) {
+      toast("Add a topic first.");
+      return;
+    }
+    const result = await apiJson("/api/ai/ideas", { method: "POST", body: payload });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Idea generation failed.");
+      return;
+    }
+    const ideas = normalizeList(result.data.ideas).map((idea, index) => ({
+      id: idea.id || `idea-${Date.now()}-${index}`,
+      createdAt: new Date().toISOString(),
+      status: "idea",
+      source: "Idea Engine",
+      ...idea,
+      platform: idea.platform || payload.platform,
+      contentType: idea.contentType || payload.contentType,
+    }));
+    state.ideas = [...ideas, ...state.ideas].slice(0, 50);
+    saveState();
+    document.querySelector("#ideas-output").innerHTML = state.ideas.map(ideaCardV4).join("");
+    toast("Ideas generated.");
+  });
+}
+
+function handleUseIdeaV4(id) {
+  state.selectedIdeaId = id;
+  saveState();
+  routeTo("/app/scripts");
+}
+
+async function handleGenerateScriptV4(button) {
+  await withBusy(button, "Writing...", async () => {
+    const selected = customValue("script-idea");
+    const idea = selected === "Custom" ? null : state.ideas.find((item) => item.id === selected || item.title === selected);
+    const customIdea = document.querySelector("#script-custom-idea")?.value.trim();
+    const payload = {
+      idea: idea || { title: customIdea || selectedIdea()?.title || "Untitled creator idea" },
+      platform: customValue("script-platform"),
+      length: customValue("script-length"),
+      format: customValue("script-format"),
+      tone: customValue("script-tone"),
+      audience: document.querySelector("#script-audience")?.value.trim() || state.creator.audience,
+      creator: state.creator,
+      dna: state.dna,
+    };
+    const result = await apiJson("/api/ai/script", { method: "POST", body: payload });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Script generation failed.");
+      return;
+    }
+    const script = {
+      id: `script-${Date.now()}`,
+      ideaId: idea?.id || null,
+      title: result.data.title || payload.idea.title,
+      platform: payload.platform,
+      lengthLabel: payload.length,
+      createdAt: new Date().toISOString(),
+      ...result.data,
+    };
+    state.scripts.unshift(script);
+    saveState();
+    render();
+    toast("Script generated.");
+  });
+}
+
+async function handleTransformScriptV4(button) {
+  const latest = state.scripts[0];
+  if (!latest) return;
+  await withBusy(button, "Rewriting...", async () => {
+    const result = await apiJson("/api/ai/script", {
+      method: "POST",
+      body: {
+        rewriteInstruction: button.dataset.transform,
+        existingScript: latest,
+        creator: state.creator,
+        dna: state.dna,
+        length: latest.lengthLabel,
+      },
+    });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Rewrite failed.");
+      return;
+    }
+    state.scripts[0] = { ...latest, ...result.data, id: latest.id, updatedAt: new Date().toISOString() };
+    saveState();
+    render();
+    toast("Script updated.");
+  });
+}
+
+function runAuthFromScriptV4() {
+  const latest = state.scripts[0];
+  if (!latest) return;
+  state.pendingAuthText = latest.script || "";
+  routeTo("/app/authenticity");
+  setTimeout(() => {
+    const input = document.querySelector("#auth-input");
+    if (input) input.value = state.pendingAuthText;
+  }, 0);
+}
+
+function saveScriptToCalendar() {
+  const script = state.scripts[0];
+  if (!script) return;
+  state.calendar.push({
+    id: `cal-${Date.now()}`,
+    title: script.title || "Untitled script",
+    platform: script.platform,
+    status: "scripting",
+    contentType: "script",
+    day: nextCalendarDay(),
+    notes: `Authenticity ${script.authenticityScore || "?"}%.`,
+  });
+  saveState();
+  toast("Script saved to calendar.");
+}
+
+function saveIdeaToCalendar(id) {
+  const idea = state.ideas.find((item) => item.id === id);
+  if (!idea) return;
+  state.calendar.push({
+    id: `cal-${Date.now()}`,
+    title: idea.title,
+    platform: idea.platform,
+    status: "idea",
+    contentType: idea.contentType,
+    day: nextCalendarDay(),
+    notes: idea.personalizationTip || "",
+  });
+  saveState();
+  toast("Idea saved to calendar.");
+}
+
+async function handleGenerateAdV4(button) {
+  await withBusy(button, "Generating...", async () => {
+    const payload = {
+      projectType: customValue("ad-project-type"),
+      idea: document.querySelector("#ad-idea")?.value.trim(),
+      audience: document.querySelector("#ad-audience")?.value.trim(),
+      mood: customValue("ad-mood"),
+      length: customValue("ad-length"),
+      platform: customValue("ad-platform"),
+      message: document.querySelector("#ad-message")?.value.trim(),
+      cta: document.querySelector("#ad-cta")?.value.trim(),
+      language: document.querySelector("#ad-language")?.value.trim(),
+      creator: state.creator,
+      dna: state.dna,
+    };
+    if (!payload.idea) {
+      toast("Add a product or story idea first.");
+      return;
+    }
+    const result = await apiJson("/api/ai/ad-studio", { method: "POST", body: payload });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Ad studio generation failed.");
+      return;
+    }
+    state.adProjects = [{ id: `ad-${Date.now()}`, ...result.data, createdAt: new Date().toISOString() }, ...(state.adProjects || [])].slice(0, 20);
+    saveState();
+    document.querySelector("#ad-output").innerHTML = adOutputV4(state.adProjects[0]);
+    toast("Project generated.");
+  });
+}
+
+async function handleScoreAuthenticityV4(button) {
+  await withBusy(button, "Scoring...", async () => {
+    const text = document.querySelector("#auth-input")?.value.trim();
+    if (!text) {
+      toast("Paste content first.");
+      return;
+    }
+    const result = await apiJson("/api/ai/authenticity", {
+      method: "POST",
+      body: { text, creator: state.creator, dna: state.dna },
+    });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Authenticity scoring failed.");
+      return;
+    }
+    state.lastAuthenticity = result.data;
+    saveState();
+    document.querySelector("#auth-output").innerHTML = authOutputV4(result.data);
+    toast("Authenticity scored.");
+  });
+}
+
+async function handleLinkYouTubeV4(button) {
+  await withBusy(button, "Linking...", async () => {
+    const input = document.querySelector("#youtube-input")?.value.trim();
+    if (!input) {
+      toast("Paste a YouTube channel, handle, or video URL.");
+      return;
+    }
+    const result = await apiJson("/api/youtube/channel", { method: "POST", body: { input } });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "YouTube link failed.");
+      return;
+    }
+    state.youtube = result.data;
+    state.youtubeConnected = true;
+    state.comments = [];
+    saveState();
+    render();
+    toast("YouTube channel linked.");
+  });
+}
+
+async function handleLoadCommentsV4(button) {
+  await withBusy(button, "Loading...", async () => {
+    const videoId = button.dataset.videoId;
+    const result = await apiJson("/api/youtube/comments", { method: "POST", body: { videoId } });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Could not load comments.");
+      return;
+    }
+    state.comments = normalizeList(result.data.comments);
+    saveState();
+    routeTo("/app/community");
+    toast("Comments loaded.");
+  });
+}
+
+async function handleGenerateRepliesV4(button) {
+  await withBusy(button, "Drafting...", async () => {
+    const result = await apiJson("/api/ai/community-replies", {
+      method: "POST",
+      body: { comments: state.comments, creator: state.creator, dna: state.dna },
+    });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Reply draft generation failed.");
+      return;
+    }
+    const replies = normalizeList(result.data.comments);
+    state.comments = state.comments.map((comment) => replies.find((reply) => reply.id === comment.id) || comment);
+    saveState();
+    render();
+    toast("Reply drafts generated.");
+  });
+}
+
+function commentToIdea(commentId) {
+  const comment = state.comments.find((item) => item.id === commentId);
+  if (!comment) return;
+  state.ideas.unshift({
+    id: `idea-${Date.now()}`,
+    title: `Answer this viewer question: ${comment.text.slice(0, 80)}`,
+    hook: comment.text,
+    concept: "Turn a real audience comment into a helpful response video.",
+    platform: "YouTube",
+    contentType: "Short or community video",
+    genericRisk: "Low",
+    authenticityScore: 88,
+    personalizationTip: "Mention the viewer question and answer from your lived process.",
+    cta: "Ask viewers what they want answered next.",
+    source: "Community Manager",
+    status: "idea",
+  });
+  saveState();
+  toast("Comment turned into an idea.");
+}
+
+function handleWeeklyPlanV4(button) {
+  if (!state.ideas.length && !state.scripts.length) {
+    toast("Generate an idea or script first.");
+    return;
+  }
+  const pool = [...state.scripts, ...state.ideas].slice(0, 5);
+  const days = [3, 5, 8, 10, 12];
+  pool.forEach((item, index) => {
+    state.calendar.push({
+      id: `cal-${Date.now()}-${index}`,
+      title: item.title,
+      platform: item.platform || "Content",
+      status: index === 0 ? "scripting" : "idea",
+      contentType: item.contentType || "content",
+      day: days[index] || nextCalendarDay(),
+      notes: index === pool.length - 1 ? "Keep one rest or community-light day after this." : "",
+    });
+  });
+  saveState();
+  render();
+  toast("Weekly plan created from your saved content.");
+}
+
+async function handleThumbnailCopy(button) {
+  await withBusy(button, "Suggesting...", async () => {
+    const payload = {
+      idea: selectedIdea() || { title: document.querySelector("#thumb-title")?.value.trim() },
+      style: customValue("thumb-style"),
+      dna: state.dna,
+    };
+    const result = await apiJson("/api/ai/thumbnail-copy", { method: "POST", body: payload });
+    const suggestions = result.ok ? normalizeList(result.data.suggestions) : fallbackThumbnailSuggestions(payload.idea?.title || "Creator idea");
+    document.querySelector("#thumbnail-copy-output").innerHTML = `
+      <div class="card-topline"><div><span class="section-kicker">Title options</span><h3>Low-token suggestions</h3></div></div>
+      <div class="list-stack">${suggestions.map((item) => insight(item.text || item, item.reason || "Short, specific, and thumbnail-friendly.")).join("")}</div>
+    `;
+    toast("Thumbnail text suggested.");
+  });
+}
+
+function generateThumbnailCanvas() {
+  const canvasNode = document.querySelector("#thumbnail-canvas");
+  if (!canvasNode) return;
+  const ctx = canvasNode.getContext("2d");
+  const title = document.querySelector("#thumb-title")?.value.trim() || selectedIdea()?.title || "NEW IDEA";
+  const subtitle = document.querySelector("#thumb-subtitle")?.value.trim();
+  const palette = customValue("thumb-palette");
+  const colors = thumbnailPalette(palette);
+  ctx.clearRect(0, 0, 1280, 720);
+
+  const gradient = ctx.createLinearGradient(0, 0, 1280, 720);
+  gradient.addColorStop(0, colors.bg1);
+  gradient.addColorStop(0.55, colors.bg2);
+  gradient.addColorStop(1, "#050706");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 1280, 720);
+
+  ctx.fillStyle = "rgba(255,255,255,0.08)";
+  for (let x = 0; x < 1280; x += 80) {
+    ctx.fillRect(x, 0, 2, 720);
+  }
+  for (let y = 0; y < 720; y += 80) {
+    ctx.fillRect(0, y, 1280, 2);
+  }
+
+  ctx.fillStyle = colors.accent;
+  ctx.fillRect(860, 80, 300, 520);
+  ctx.fillStyle = "rgba(5,7,6,0.82)";
+  ctx.fillRect(890, 110, 240, 460);
+  ctx.strokeStyle = colors.accent2;
+  ctx.lineWidth = 8;
+  ctx.strokeRect(890, 110, 240, 460);
+
+  ctx.fillStyle = "#f5fbf8";
+  ctx.font = "900 92px Inter, Arial, sans-serif";
+  wrapCanvasText(ctx, title.toUpperCase(), 80, 170, 720, 102);
+  if (subtitle) {
+    ctx.fillStyle = colors.accent2;
+    ctx.font = "800 42px Inter, Arial, sans-serif";
+    wrapCanvasText(ctx, subtitle.toUpperCase(), 84, 560, 700, 52);
+  }
+
+  ctx.fillStyle = "#050706";
+  ctx.fillRect(84, 610, 310, 54);
+  ctx.fillStyle = colors.accent2;
+  ctx.font = "800 28px Inter, Arial, sans-serif";
+  ctx.fillText("CONTENTUS DRAFT", 104, 647);
+
+  state.thumbnails.unshift({
+    id: `thumb-${Date.now()}`,
+    title,
+    subtitle,
+    palette,
+    createdAt: new Date().toISOString(),
+  });
+  saveState();
+  toast("Thumbnail generated locally.");
+}
+
+function downloadThumbnailPng() {
+  const canvasNode = document.querySelector("#thumbnail-canvas");
+  if (!canvasNode) return;
+  const link = document.createElement("a");
+  link.href = canvasNode.toDataURL("image/png");
+  link.download = "contentus-thumbnail.png";
+  link.click();
+}
+
+function downloadLatestScriptPdf() {
+  const script = state.scripts[0];
+  if (!script) return;
+  const blob = buildScriptPdf(script);
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${slugify(script.title || "contentus-script")}.pdf`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function fieldV4(id, label, value = "", type = "text", placeholder = "", extra = "") {
+  return `<div class="form-field ${extra}"><label for="${id}">${label}</label><input id="${id}" type="${type}" value="${escapeHtml(value || "")}" placeholder="${escapeHtml(placeholder)}"></div>`;
+}
+
+function textareaV4(id, label, value = "", placeholder = "", extra = "") {
+  return `<div class="form-field ${extra}"><label for="${id}">${label}</label><textarea id="${id}" placeholder="${escapeHtml(placeholder)}">${escapeHtml(value || "")}</textarea></div>`;
+}
+
+function selectCustom(id, label, options, selected = "") {
+  const opts = normalizeList(options);
+  const chosen = selected || opts[0] || "Custom";
+  const hasCustom = chosen === "Custom";
+  return `
+    <div class="form-field">
+      <label for="${id}">${label}</label>
+      <div class="select-wrap">
+        <select id="${id}" data-custom-select="${id}">
+          ${opts.map((option) => {
+            const value = typeof option === "string" ? option : option.value;
+            const text = typeof option === "string" ? option : option.label;
+            return `<option value="${escapeHtml(value)}" ${value === chosen ? "selected" : ""}>${escapeHtml(text)}</option>`;
+          }).join("")}
+        </select>
+      </div>
+      <input id="${id}-custom" class="custom-input" placeholder="Enter custom ${escapeHtml(label.toLowerCase())}" ${hasCustom ? "" : "hidden"}>
+    </div>
+  `;
+}
+
+function customValue(id) {
+  const select = document.querySelector(`#${id}`);
+  const value = select?.value || "";
+  if (value === "Custom") return document.querySelector(`#${id}-custom`)?.value.trim() || "Custom";
+  return value;
+}
+
+function ideaOptions() {
+  return state.ideas.length
+    ? [{ value: "Custom", label: "Custom idea" }, ...state.ideas.slice(0, 20).map((idea) => ({ value: idea.id, label: idea.title }))]
+    : ["Custom"];
+}
+
+function selectedIdea() {
+  return state.ideas.find((idea) => idea.id === state.selectedIdeaId) || state.ideas[0] || null;
+}
+
+function emptyPanel(title, text, detail = "") {
+  return `
+    <article class="empty-panel">
+      <span class="empty-mark">+</span>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(text)}</p>
+      ${detail ? `<small>${escapeHtml(detail)}</small>` : ""}
+    </article>
+  `;
+}
+
+function emptyMini(text) {
+  return `<p class="empty-mini">${escapeHtml(text)}</p>`;
+}
+
+function sectionBlock(title, content) {
+  if (!content) return "";
+  return `<section class="script-section"><h4>${escapeHtml(title)}</h4><p>${escapeHtml(content)}</p></section>`;
+}
+
+function listText(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join("\n");
+  return value || "";
+}
+
+function toTextList(value) {
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "Not enough data yet.";
+  return value || "Not enough data yet.";
+}
+
+function normalizeDnaResult(dna) {
+  const fallback = safeDna();
+  return {
+    ...fallback,
+    ...dna,
+    score: Number(dna.score || dna.creatorDnaScore || 72),
+    phrases: normalizeStringArray(dna.phrases || dna.commonPhrases),
+    themes: normalizeStringArray(dna.themes || dna.contentThemes),
+    examplesLike: normalizeStringArray(dna.examplesLike || dna.soundsLikeYou),
+    examplesUnlike: normalizeStringArray(dna.examplesUnlike || dna.doesNotSoundLikeYou),
+  };
+}
+
+function normalizeStringArray(value) {
+  if (Array.isArray(value)) return value;
+  if (!value) return [];
+  return String(value).split(/\n|,/).map((item) => item.trim()).filter(Boolean);
+}
+
+function riskClass(risk = "") {
+  const clean = String(risk).toLowerCase();
+  if (clean.includes("high") || clean.includes("too")) return "bad";
+  if (clean.includes("medium") || clean.includes("needs")) return "warn";
+  return "good";
+}
+
+function averageScore(values) {
+  const clean = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
+  if (!clean.length) return 0;
+  return Math.round(clean.reduce((sum, value) => sum + value, 0) / clean.length);
+}
+
+function bestVideo() {
+  const videos = normalizeList(state.youtube?.videos || state.youtube?.recentVideos);
+  return videos.sort((a, b) => Number(b.views || 0) - Number(a.views || 0))[0] || null;
+}
+
+function videoChartValues(videos) {
+  const maxViews = Math.max(1, ...videos.map((video) => Number(video.views || 0)));
+  return videos.map((video) => (Number(video.views || 0) / maxViews) * 80 + 8);
+}
+
+function youtubeSummaryCard(video) {
+  if (!video) return emptyMini("No recent videos found.");
+  return `
+    <div class="video-row clean-row">
+      ${video.thumbnail ? `<img src="${escapeHtml(video.thumbnail)}" alt="">` : `<span class="thumb-placeholder"></span>`}
+      <div>
+        <strong>${escapeHtml(video.title)}</strong>
+        <small>${formatNumber(video.views)} views - ${formatNumber(video.comments)} comments</small>
+      </div>
+    </div>
+    <div class="list-stack">
+      ${growthInsightsFromVideos(normalizeList(state.youtube?.videos || state.youtube?.recentVideos)).slice(0, 2).map((item) => insight(item.title, item.text)).join("")}
+    </div>
+  `;
+}
+
+function growthInsightsFromVideos(videos) {
+  if (!videos.length) return [{ title: "No video data yet", text: "Link a public channel and fetch recent uploads first." }];
+  const sorted = [...videos].sort((a, b) => Number(b.views || 0) - Number(a.views || 0));
+  const top = sorted[0];
+  const low = sorted[sorted.length - 1];
+  const avgViews = Math.round(sorted.reduce((sum, video) => sum + Number(video.views || 0), 0) / sorted.length);
+  return [
+    { title: "Repeat what is already working", text: `${top.title || "Your top video"} is above the recent average of ${formatNumber(avgViews)} views. Turn its topic into a follow-up with a new proof point.` },
+    { title: "Improve the weakest angle", text: `${low.title || "Your lowest recent video"} is the lowest recent performer. Rework the title around a clearer personal outcome.` },
+    { title: "Turn comments into videos", text: state.comments.length ? "You have loaded comments. Convert repeated questions into short-form answers." : "Load comments from a recent video to find audience questions." },
+  ];
+}
+
+function burnoutLabel() {
+  const count = state.calendar.length;
+  if (count > 10) return "Heavy week. Add a rest day.";
+  if (count > 5) return "Manageable, but watch energy.";
+  return count ? "Balanced so far." : "No planned posts.";
+}
+
+function nextCalendarDay() {
+  const used = new Set(state.calendar.map((item) => Number(item.day)));
+  for (const day of [3, 5, 8, 10, 12, 15, 17, 20, 22, 25]) {
+    if (!used.has(day)) return day;
+  }
+  return Math.min(30, (state.calendar.length % 30) + 1);
+}
+
+async function fileToBase64(file) {
+  const maxBytes = 9 * 1024 * 1024;
+  const slice = file.size > maxBytes ? file.slice(0, maxBytes, file.type) : file;
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(slice);
+  });
+  return {
+    name: file.name,
+    mimeType: file.type || "application/octet-stream",
+    data: String(dataUrl).split(",")[1] || "",
+    truncated: file.size > maxBytes,
+  };
+}
+
+function buildScriptPdf(script) {
+  const lines = [
+    "CONTENTUS SCRIPT",
+    script.title || "Untitled script",
+    `Platform: ${script.platform || ""}`,
+    `Length: ${script.lengthLabel || script.targetLength || ""}`,
+    `Authenticity: ${script.authenticityScore || "?"}%`,
+    "",
+    "HOOK OPTIONS",
+    listText(script.hookOptions),
+    "",
+    "FULL SCRIPT",
+    script.script || "",
+    "",
+    "SCENE-BY-SCENE",
+    listText(script.scenes || script.sceneBreakdown),
+    "",
+    "SHOT LIST",
+    listText(script.shotList),
+    "",
+    "B-ROLL",
+    listText(script.broll || script.bRollSuggestions),
+    "",
+    "CAPTION",
+    script.caption || "",
+    "",
+    "PERSONALIZATION TIP",
+    script.personalizationTip || "",
+  ].flatMap((line) => wrapPdfLine(String(line), 82));
+
+  const pages = [];
+  for (let index = 0; index < lines.length; index += 38) pages.push(lines.slice(index, index + 38));
+  const objects = [];
+  const pageRefs = [];
+  objects.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objects.push(null);
+  pages.forEach((pageLines) => {
+    const content = [
+      "BT",
+      "/F1 13 Tf",
+      "50 780 Td",
+      "16 TL",
+      ...pageLines.map((line, index) => `${index ? "T*" : ""} (${pdfEscape(line)}) Tj`),
+      "ET",
+    ].join("\n");
+    const contentObj = objects.length + 2;
+    const pageObj = objects.length + 1;
+    pageRefs.push(`${pageObj} 0 R`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Resources << /Font << /F1 ${pages.length * 2 + 3} 0 R >> >> /Contents ${contentObj} 0 R >>`);
+    objects.push(`<< /Length ${content.length} >>\nstream\n${content}\nendstream`);
+  });
+  objects[1] = `<< /Type /Pages /Kids [${pageRefs.join(" ")}] /Count ${pageRefs.length} >>`;
+  objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([pdf], { type: "application/pdf" });
+}
+
+function wrapPdfLine(text, max) {
+  if (!text) return [""];
+  const words = text.replace(/\r/g, "").split(/\s+/);
+  const lines = [];
+  let current = "";
+  for (const word of words) {
+    if ((current + " " + word).trim().length > max) {
+      if (current) lines.push(current);
+      current = word;
+    } else {
+      current = `${current} ${word}`.trim();
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
+}
+
+function pdfEscape(text) {
+  return text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function slugify(text) {
+  return String(text).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "contentus";
+}
+
+function wrapCanvasText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(/\s+/);
+  let line = "";
+  words.forEach((word) => {
+    const test = `${line} ${word}`.trim();
+    if (ctx.measureText(test).width > maxWidth && line) {
+      ctx.fillText(line, x, y);
+      line = word;
+      y += lineHeight;
+    } else {
+      line = test;
+    }
+  });
+  if (line) ctx.fillText(line, x, y);
+}
+
+function thumbnailPalette(value = "") {
+  const clean = value.toLowerCase();
+  if (clean.includes("red")) return { bg1: "#210407", bg2: "#111111", accent: "#ff3d4f", accent2: "#ffd447" };
+  if (clean.includes("lime")) return { bg1: "#04120d", bg2: "#08152a", accent: "#85ff82", accent2: "#7da7ff" };
+  if (clean.includes("white")) return { bg1: "#10201d", bg2: "#050706", accent: "#f5fbf8", accent2: "#5ee8f2" };
+  return { bg1: "#061b1f", bg2: "#190c0b", accent: "#5ee8f2", accent2: "#ff7567" };
+}
+
+function fallbackThumbnailSuggestions(title) {
+  return [
+    { text: title.slice(0, 32) || "I Tested This", reason: "Keeps the exact idea clear." },
+    { text: "AI Exposed My Process", reason: "Creates curiosity without fake claims." },
+    { text: "Before vs After", reason: "Simple, visual, and low-risk." },
+  ];
+}
+
+function formatNumber(value) {
+  const number = Number(value || 0);
+  if (!Number.isFinite(number)) return "0";
+  return new Intl.NumberFormat(undefined, { notation: number >= 10000 ? "compact" : "standard" }).format(number);
 }
 
 async function bootstrap() {

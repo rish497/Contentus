@@ -7,6 +7,8 @@ let pageContext = {
   title: "Unknown page",
   url: "",
   selection: "",
+  visibleText: "",
+  description: "",
 };
 
 document.addEventListener("click", async (event) => {
@@ -16,6 +18,8 @@ document.addEventListener("click", async (event) => {
   const action = button.dataset.action;
   if (action === "save") return saveIdea();
   if (action === "analyze") return showResult(analyzeContent(pageContext));
+  if (action === "titles") return showResult(suggestTitles(pageContext));
+  if (action === "description") return showResult(generateDescription(pageContext));
   if (action === "mine") return showResult(makeItMine(pageContext.selection || pageContext.title));
   if (action === "guard") return showResult(checkAuthenticity(pageContext.selection || pageContext.title));
   if (action === "caption") return showResult(generateCaptions(pageContext.selection || pageContext.title));
@@ -35,13 +39,21 @@ async function init() {
 async function getPageContext() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let selection = "";
+  let visibleText = "";
+  let description = "";
 
   try {
     const [result] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => window.getSelection().toString(),
+      func: () => ({
+        selection: window.getSelection().toString(),
+        visibleText: document.body?.innerText?.replace(/\s+/g, " ").slice(0, 5000) || "",
+        description: document.querySelector("meta[name='description']")?.content || "",
+      }),
     });
-    selection = result.result || "";
+    selection = result.result?.selection || "";
+    visibleText = result.result?.visibleText || "";
+    description = result.result?.description || "";
   } catch {
     selection = "";
   }
@@ -50,6 +62,8 @@ async function getPageContext() {
     title: tab.title || "Untitled page",
     url: tab.url || "",
     selection,
+    visibleText,
+    description,
   };
 }
 
@@ -80,14 +94,39 @@ async function openSidePanel() {
 }
 
 function analyzeContent(context) {
+  const subject = context.selection || context.description || context.title;
   return [
     `Summary: ${context.title}`,
-    "Hook analysis: The page likely leads with a clear problem or curiosity gap.",
+    `Hook analysis: ${hookGuess(subject)}`,
     `Platform: ${detectPlatform(context.url)}`,
     "Audience angle: Turn the topic into a version for your own audience, proof, and niche.",
     "What works: Specific promise, easy entry point, and clear emotional angle.",
     "Originality warning: Use this as inspiration, not copying.",
   ].join("\n\n");
+}
+
+function suggestTitles(context) {
+  const subject = cleanSubject(context.selection || context.description || context.title);
+  return [
+    "Title suggestions:",
+    `1. I Tested ${subject} So You Do Not Have To`,
+    `2. The ${subject} Mistake Nobody Explains`,
+    `3. I Tried ${subject} With My Real Workflow`,
+    `4. Before You Copy ${subject}, Watch This`,
+    "",
+    "Use this as inspiration, not copying. Add your own proof or story before publishing.",
+  ].join("\n");
+}
+
+function generateDescription(context) {
+  const subject = cleanSubject(context.selection || context.description || context.title);
+  return [
+    "YouTube description draft:",
+    `In this video, I break down ${subject} through my own creator workflow instead of copying someone else's angle. I show what works, what I would change, and how to turn the idea into something useful for my audience.`,
+    "",
+    "CTA: Comment with the part you want me to test next.",
+    "Disclosure: Brainstormed with AI support; final story and edits should be yours.",
+  ].join("\n");
 }
 
 function makeItMine(text) {
@@ -118,6 +157,18 @@ function generateCaptions(text) {
     "LinkedIn: The best creator AI workflow protects voice first and output second.",
     "X thread: 1/ Fast content is useful only if it still sounds like you...",
   ].join("\n\n");
+}
+
+function cleanSubject(text = "") {
+  const clean = text.replace(/\s+/g, " ").replace(/[^\w\s-]/g, "").trim();
+  const words = clean.split(/\s+/).filter(Boolean).slice(0, 7).join(" ");
+  return words || "This Idea";
+}
+
+function hookGuess(text = "") {
+  if (/\?|how|why|mistake|secret|best|worst/i.test(text)) return "The page uses curiosity or a problem-led angle.";
+  if (/review|tested|try|experiment/i.test(text)) return "The page likely works because it promises proof through a test.";
+  return "The page can be reframed as a personal experiment, a useful breakdown, or a before/after.";
 }
 
 function detectPlatform(url = "") {
