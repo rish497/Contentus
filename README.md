@@ -66,7 +66,16 @@ Use products with free API-key access or free tiers:
 
 Never expose Supabase secret/service-role keys in frontend code. Use the publishable/anon key only with Row Level Security configured.
 
-For Render deployment, add the same environment variables in the Render Dashboard because local `.env` files are not uploaded as production secrets.
+For Render deployment, add the same environment variables in the Render Dashboard because local `.env` files are not uploaded as production secrets. In particular, Google Calendar and approved YouTube replies need these Render environment variables:
+
+```text
+GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET
+GOOGLE_REDIRECT_URI
+SESSION_SECRET
+```
+
+Restart or redeploy the service after changing any of those values.
 
 For Google OAuth, add this authorized redirect URI in Google Cloud:
 
@@ -81,3 +90,5 @@ https://your-render-service.onrender.com/api/google/oauth/callback
 ```
 
 Set `SESSION_SECRET` to a long random value so Google refresh tokens can be encrypted and reused.
+
+If the app still says `Google OAuth is not configured` after updating `.env`, stop and restart `npm start`. The server reads `.env` only when it starts. For Render, redeploy after changing environment variables.

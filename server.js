@@ -92,7 +92,7 @@ const server = createServer(async (request, response) => {
 
     await serveStatic(response, url.pathname);
   } catch (error) {
-    sendJson(response, 500, { error: "Internal server error", message: error.message, detail: error.message });
+    sendJson(response, 500, { error: "Internal server error", detail: error.message });
   }
 });
 
@@ -156,7 +156,7 @@ async function handleApi(request, response, url) {
       app: "Contentus",
       integrations: integrationStatus(),
       authProvider: integrationStatus().supabase ? "supabase" : "not-configured",
-      aiProvider: integrationStatus().gemini ? "gemini" : "not-configured",
+      aiProvider: integrationStatus().gemini ? "gemini" : "local-fallback",
       youtubeProvider: integrationStatus().youtubeData ? "youtube-data-api" : "not-configured",
     });
     return;
@@ -255,14 +255,6 @@ async function handleApi(request, response, url) {
 
   const body = await readJsonBody(request);
 
-  if (url.pathname.startsWith("/api/ai/") && !configured(GEMINI_API_KEY)) {
-    sendJson(response, 501, {
-      error: "Gemini API key missing",
-      message: "Set GEMINI_API_KEY in .env and Render. Contentus does not generate fake AI output when Gemini is not configured.",
-    });
-    return;
-  }
-
   if (request.method === "GET" && url.pathname === "/api/calendar/events") {
     const result = await googleCalendarEvents(request, url);
     sendJson(response, result.status, result.payload);
@@ -305,21 +297,9 @@ async function handleApi(request, response, url) {
     return;
   }
 
-  if (request.method === "POST" && url.pathname === "/api/ai/trends") {
-    const result = await analyzeTrendsWithAi(body);
-    sendJson(response, 200, result);
-    return;
-  }
-
   if (request.method === "POST" && url.pathname === "/api/ai/script") {
     const script = await generateScriptWithAi(body);
     sendJson(response, 200, script);
-    return;
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/ai/credibility") {
-    const result = await checkScriptCredibility(body);
-    sendJson(response, 200, result);
     return;
   }
 
@@ -335,26 +315,8 @@ async function handleApi(request, response, url) {
     return;
   }
 
-  if (request.method === "POST" && url.pathname === "/api/ai/thumbnail-design") {
-    const design = await generateThumbnailDesign(body);
-    sendJson(response, 200, design);
-    return;
-  }
-
   if (request.method === "POST" && url.pathname === "/api/ai/authenticity") {
     const result = await scoreAuthenticityWithAi(body);
-    sendJson(response, 200, result);
-    return;
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/ai/video-checker") {
-    const result = await analyzeVideoWithAi(body);
-    sendJson(response, 200, result);
-    return;
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/ai/video-detail") {
-    const result = await detailedVideoAnalysisWithAi(body);
     sendJson(response, 200, result);
     return;
   }
@@ -365,14 +327,20 @@ async function handleApi(request, response, url) {
     return;
   }
 
-  if (request.method === "POST" && url.pathname === "/api/ai/publish-pack") {
-    const result = await generatePublishPack(body);
+  if (request.method === "POST" && url.pathname === "/api/ai/trends") {
+    const result = await analyzeTrendsWithAi(body);
     sendJson(response, 200, result);
     return;
   }
 
-  if (request.method === "POST" && url.pathname === "/api/ai/coach") {
-    const result = await generateCoachReply(body);
+  if (request.method === "POST" && url.pathname === "/api/ai/video-check") {
+    const result = await analyzeVideoWithAi(body);
+    sendJson(response, 200, result);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ai/thumbnail-image") {
+    const result = await generateThumbnailImage(body);
     sendJson(response, 200, result);
     return;
   }
@@ -647,7 +615,6 @@ function buildStoredGoogleAuth(existing = {}, tokenPayload = {}, scopeKey = "all
   const capabilities = { ...(existing?.capabilities || {}) };
   if (scopeKey === "calendar" || scopeKey === "all") capabilities.calendar = true;
   if (scopeKey === "youtube" || scopeKey === "all") capabilities.youtube = true;
-  if (scopeKey === "upload" || scopeKey === "publisher" || scopeKey === "all") capabilities.upload = true;
   const stored = {
     ...existing,
     access_token: tokenPayload.access_token,
@@ -667,7 +634,6 @@ function googleScopes(scopeKey = "all") {
   const scopes = new Set(["openid", "email", "profile"]);
   if (scopeKey === "calendar" || scopeKey === "all") scopes.add("https://www.googleapis.com/auth/calendar.events");
   if (scopeKey === "youtube" || scopeKey === "all") scopes.add("https://www.googleapis.com/auth/youtube.force-ssl");
-  if (scopeKey === "upload" || scopeKey === "publisher" || scopeKey === "all") scopes.add("https://www.googleapis.com/auth/youtube.upload");
   return [...scopes];
 }
 
@@ -715,7 +681,6 @@ function googlePublicState(stored = {}) {
   return {
     calendar: Boolean(stored.capabilities?.calendar),
     youtubePosting: Boolean(stored.capabilities?.youtube),
-    youtubeUpload: Boolean(stored.capabilities?.upload),
     reconnectRequired: Boolean(stored.reconnect_required),
     expiresAt: stored.expires_at,
   };
@@ -744,6 +709,7 @@ function redirectHtml(response, route, message) {
 async function generateCreatorDna(body = {}) {
   const youtubeContext = body.youtubeUrl ? await fetchYouTubeContext(body.youtubeUrl) : null;
   const mediaNote = body.media?.truncated ? "Uploaded media was trimmed before analysis to keep the request lightweight." : "";
+  const fallback = fallbackDna(body, youtubeContext, mediaNote);
   const prompt = `
 You are Contentus, a creator voice profiler. Analyze the creator's real samples and return only JSON.
 
@@ -779,17 +745,19 @@ Return this JSON shape:
 
 Rules: do not invent private facts. If data is thin, say what is uncertain. Preserve originality and warn against copying.
 `;
-  const result = await callGeminiJson(prompt, {
+  const result = await callGeminiJson(prompt, fallback, {
     media: body.media,
     temperature: 0.25,
   });
   return {
+    ...fallback,
     ...result,
     mediaNote: [mediaNote, youtubeContext?.note, result.mediaNote].filter(Boolean).join(" "),
   };
 }
 
 async function generateIdeasWithAi(body = {}) {
+  const fallback = fallbackIdeas(body);
   const prompt = `
 Generate 5 original Contentus ideas for a creator. Return only JSON:
 {
@@ -807,6 +775,10 @@ Generate 5 original Contentus ideas for a creator. Return only JSON:
       "longFormVersion": string,
       "genericRisk": "Low" | "Medium" | "High",
       "authenticityScore": number,
+      "hitProbability": number,
+      "verdict": "Likely hit" | "Coin flip" | "Likely miss",
+      "hitReasons": string[],
+      "missRisks": string[],
       "personalizationTip": string,
       "cta": string,
       "disclosure": string
@@ -818,139 +790,69 @@ Inputs:
 ${JSON.stringify(body, null, 2)}
 
 Rules: no copying, no fake trend claims, no spam growth tactics, include a real personalization tip for every idea.
+For hit/miss: "hitProbability" is an honest 0-100 estimate of whether this idea will perform for THIS creator on THIS platform/goal — not hype. Base it on hook strength, audience fit, originality vs. saturation, and emotional pull. "verdict" must agree with the number (>=65 hit, 45-64 coin flip, <45 miss). "hitReasons" are 2-3 concrete reasons it could land; "missRisks" are 1-3 honest reasons it could flop. Be willing to predict a miss.
 `;
-  const result = await callGeminiJson(prompt, { temperature: 0.55 });
-  const ideas = normalizeArray(result.ideas);
-  if (!ideas.length) throw new Error("Gemini did not return any ideas. Try adding more topic or audience context.");
-  return ideas;
-}
-
-async function analyzeTrendsWithAi(body = {}) {
-  const youtubeTrends = /youtube/i.test(body.platform || "") ? await fetchYouTubeTrendingVideos(body.niche || "") : [];
-  const prompt = `
-Return only JSON:
-{
-  "platform": string,
-  "verdict": string,
-  "hitScore": number,
-  "momentumScore": number,
-  "hitOrMiss": string,
-  "whyNow": string,
-  "creatorAngle": string,
-  "copyRisk": string,
-  "audioOpportunity": string,
-  "topics": string[],
-  "audioSignals": string[],
-  "angles": string[]
-}
-
-Analyze whether this creator idea fits current platform direction. Encourage originality, not copying.
-Platform/niche/idea:
-${JSON.stringify(body, null, 2)}
-
-YouTube trending/reference data when available:
-${JSON.stringify(youtubeTrends, null, 2)}
-
-For TikTok/Instagram, do not pretend to have private platform trend access. Provide a creator-safe trend brief from the user context and say what must be checked manually.
-`;
-  return callGeminiJson(prompt, { temperature: 0.42 });
+  const result = await callGeminiJson(prompt, { ideas: fallback }, { temperature: 0.55 });
+  return normalizeArray(result.ideas).length ? result.ideas : fallback;
 }
 
 async function generateScriptWithAi(body = {}) {
   const lengthLabel = String(body.length || body.existingScript?.lengthLabel || "60 seconds");
   const targetWords = targetWordsFromLength(lengthLabel);
+  const fallback = fallbackScript(body, targetWords);
   const prompt = `
-You are Contentus Script Builder. Return only JSON. Write a real script the creator can speak on camera.
+You are a scriptwriter for a specific creator. Write the ACTUAL WORDS they will say out loud on camera. Return only JSON.
 
 Input:
 ${JSON.stringify(body, null, 2)}
 
-Target duration: ${lengthLabel}
-Target word count: about ${targetWords} spoken words. A 30 second script must be short. An 8 minute script must be much longer and more developed.
+Target duration: ${lengthLabel} (about ${targetWords} spoken words). 30s = tight and punchy. 8 min = long and fully developed with several main points.
+
+CRITICAL RULES — this is what makes a script good instead of AI slop:
+- Write the literal spoken lines, the way the creator would actually talk. First person. Conversational. Contractions.
+- NEVER narrate the process of making the video. Banned: "Cold open:", "Here is the honest setup", "first I am showing the messy version", "the goal is to make it sound like a person", "not just another generic AI draft", "let me turn this into a structure". If a line describes the script instead of being the script, it is wrong.
+- No filler, no hype, no "in today's video". Open with a real hook line they say in the first 3 seconds.
+- Match the creator's voice, humor, and phrasing from their Creator DNA. Use their actual vibe.
+- Be specific to the topic. Reference concrete details, examples, numbers, or moments — not vague generalities.
+- Each section's "spoken" text is ONLY the words said aloud. Stage directions/visuals go in shotList/broll/onScreenText, never inside spoken lines.
 
 Return this JSON:
 {
   "title": string,
-  "logline": string,
   "targetLength": string,
   "authenticityScore": number,
   "genericRisk": "Low" | "Medium" | "High",
   "personalizationTip": string,
   "disclosure": string,
   "hookOptions": string[],
-  "coldOpen": string,
-  "intro": string,
-  "beats": [
-    {
-      "time": string,
-      "title": string,
-      "intent": string,
-      "spokenLines": string,
-      "visual": string
-    }
-  ],
-  "outro": string,
-  "script": string,
-  "visualNotes": string[],
+  "sections": [{ "label": string, "spoken": string }],
+  "scenes": string[],
+  "voiceover": string,
   "shotList": string[],
   "broll": string[],
   "onScreenText": string[],
-  "credibilityNotes": string[],
   "caption": string,
   "hashtags": string[],
   "endingOptions": string[]
 }
 
-Rules:
-- Write in first person as the creator speaking. No "I want to test [title]" templated slop.
-- The script must have exact words to say, not vague directions.
-- Include a clear point of view, a grounded setup, evidence/proof moments, and a specific ending.
-- If the idea involves children, health, safety, money, or claims, add credibility notes and avoid overclaiming.
-- Infer CTA, humor, and personal story from Creator DNA. Do not use separate toggles.
-- Avoid generic AI filler, inflated claims, and repetitive paragraphs.
+"sections" is the spoken script broken into labeled beats, e.g. labels like "Hook", "Setup", "Main point 1", "Main point 2", "Payoff", "Call to action". For short videos use 3-5 sections; for long videos use more. Each "spoken" value is the exact words to say for that beat.
 `;
-  let result = await callGeminiJson(prompt, { temperature: 0.45 });
-  if (wordCount(result.script || "") < Math.round(targetWords * 0.45)) {
-    result = await callGeminiJson(`${prompt}
-
-The previous script was too short for ${lengthLabel}. Regenerate with about ${targetWords} spoken words and keep the same JSON shape.`, {
-      temperature: 0.42,
-      maxOutputTokens: 8192,
-    });
+  const result = await callGeminiJson(prompt, fallback, { temperature: 0.6 });
+  const sections = normalizeArray(result.sections).filter((s) => s && (s.spoken || s.label));
+  const script = { ...fallback, ...result, sections, targetLength: result.targetLength || lengthLabel };
+  // Build the flat "script" string from sections so it renders cleanly and stays
+  // consistent. Only fall back to the model's raw script (or local seed) if no sections.
+  if (sections.length) {
+    script.script = sections.map((s) => `${(s.label || "").toUpperCase()}\n${(s.spoken || "").trim()}`.trim()).join("\n\n");
+  } else if (!String(script.script || "").trim()) {
+    script.script = fallback.script;
   }
-  const script = { ...result, targetLength: result.targetLength || lengthLabel };
-  if (!normalizeArray(script.beats).length && normalizeArray(script.scenes).length) {
-    script.beats = normalizeArray(script.scenes).map((scene, index) => ({ time: `Beat ${index + 1}`, title: `Section ${index + 1}`, spokenLines: String(scene), visual: "" }));
-  }
-  if (wordCount(script.script || "") < Math.round(targetWords * 0.45)) throw new Error("Gemini returned a script that was too short for the requested length. Try again or add more brief details.");
   return script;
 }
 
-async function checkScriptCredibility(body = {}) {
-  const prompt = `
-Return only JSON:
-{
-  "score": number,
-  "verdict": string,
-  "claimRisk": string,
-  "trustScore": number,
-  "originality": number,
-  "suggestions": [{"title":string,"reason":string,"implementation":string}]
-}
-
-Check this creator script for credibility, overclaims, vague proof, copy risk, unsafe advice, and missing source/experience moments.
-Script:
-${JSON.stringify(body.script || {}, null, 2)}
-
-Creator DNA:
-${JSON.stringify(body.dna || {}, null, 2)}
-
-Be practical and creator-friendly. Do not sound legal-heavy.
-`;
-  return callGeminiJson(prompt, { temperature: 0.25 });
-}
-
 async function generateAdStudioWithAi(body = {}) {
+  const fallback = fallbackAdProject(body);
   const prompt = `
 You are Contentus Ad and Short Film Studio. Return only JSON.
 
@@ -991,13 +893,13 @@ Return:
 
 Rules: flag unsafe claims, avoid deepfake/likeness misuse, include an AI disclosure line if AI assisted.
 `;
-  const result = await callGeminiJson(prompt, { temperature: 0.5 });
-  if (!normalizeArray(result.versions).length) throw new Error("Gemini did not return ad/film versions.");
-  return result;
+  const result = await callGeminiJson(prompt, fallback, { temperature: 0.5 });
+  return { ...fallback, ...result, versions: normalizeArray(result.versions).length ? result.versions : fallback.versions };
 }
 
 async function generateThumbnailCopy(body = {}) {
   const title = body.idea?.title || "creator idea";
+  const fallback = fallbackThumbnailCopy(title);
   const prompt = `
 Return only JSON: {"suggestions":[{"text":string,"reason":string}]}
 Create 3 thumbnail text options under 32 characters.
@@ -1006,58 +908,12 @@ Style: ${body.style || "clean proof"}
 Creator DNA: ${JSON.stringify(body.dna || {})}
 Use very few words. No clickbait lies.
 `;
-  const result = await callGeminiJson(prompt, { temperature: 0.35, maxOutputTokens: 350 });
-  const suggestions = normalizeArray(result.suggestions);
-  if (!suggestions.length) throw new Error(`Gemini did not return thumbnail text suggestions for "${title}".`);
-  return suggestions;
-}
-
-async function generateThumbnailDesign(body = {}) {
-  const prompt = `
-Return only JSON:
-{
-  "title": string,
-  "mainText": string,
-  "supportText": string,
-  "palette": string,
-  "textSize": number,
-  "textWeight": string,
-  "textBox": {"x":number,"y":number,"w":number,"lineHeight":number},
-  "focalBox": {"x":number,"y":number,"w":number,"h":number},
-  "rationale": string
-}
-
-Create a YouTube thumbnail layout plan for a canvas renderer. Keep text short and readable. Do not imitate any specific brand.
-Input:
-${JSON.stringify(body, null, 2)}
-
-If a selection box is provided, focus the requested update on that region. No fake claims or misleading shock text.
-`;
-  const design = await callGeminiJson(prompt, { temperature: 0.38, maxOutputTokens: 900 });
-  const image = await callGeminiImage(thumbnailImagePrompt(body, design));
-  return { ...design, ...image, imageGeneratedBy: "gemini" };
-}
-
-function thumbnailImagePrompt(body = {}, design = {}) {
-  return `
-Create a 16:9 YouTube thumbnail image for this creator concept.
-
-Main text to include exactly: ${design.mainText || body.mainText || body.idea?.title || "Untitled"}
-Support text: ${design.supportText || ""}
-Idea: ${JSON.stringify(body.idea || {})}
-Creator brief: ${body.brief || ""}
-
-Style requirements:
-- premium dark creator-tech thumbnail
-- high contrast, readable text, one clear focal subject
-- energetic but not misleading
-- no fake logos, no copyrighted characters, no real celebrity likeness unless uploaded by user
-- do not imitate any provided reference image exactly
-- no extra random words beyond the requested main/support text
-`;
+  const result = await callGeminiJson(prompt, { suggestions: fallback }, { temperature: 0.35, maxOutputTokens: 350 });
+  return normalizeArray(result.suggestions).length ? result.suggestions : fallback;
 }
 
 async function scoreAuthenticityWithAi(body = {}) {
+  const fallback = fallbackAuthenticity(body.text || "", body.dna);
   const prompt = `
 You are Contentus Authenticity Guard. Compare the content with the Creator DNA. Return only JSON:
 {
@@ -1087,58 +943,21 @@ ${String(body.text || "").slice(0, 14000)}
 
 Rules: encourage originality, flag generic AI style, risky claims, copied inspiration, and missing disclosure.
 `;
-  return callGeminiJson(prompt, { temperature: 0.25 });
-}
-
-async function analyzeVideoWithAi(body = {}) {
-  const youtubeContext = body.youtubeUrl ? await fetchYouTubeContext(body.youtubeUrl) : null;
-  const prompt = `
-Return only JSON:
-{
-  "title": string,
-  "totalScore": number,
-  "audioScore": number,
-  "visualScore": number,
-  "titleScore": number,
-  "thumbnailScore": number,
-  "pacingScore": number,
-  "targetAudience": string,
-  "summary": string,
-  "working": string[],
-  "improvements": string[],
-  "audienceFit": string,
-  "editChecklist": string[]
-}
-
-Analyze this creator video in simple, readable language. Score audio quality, visuals, title, thumbnail, pacing, and target audience.
-Input/context:
-${JSON.stringify({ context: body.context, youtubeContext }, null, 2)}
-`;
-  return callGeminiJson(prompt, { media: body.media, temperature: 0.32, maxOutputTokens: 2200 });
-}
-
-async function detailedVideoAnalysisWithAi(body = {}) {
-  const prompt = `
-Return only JSON:
-{
-  "verdict": string,
-  "graphs": [{"label":string,"value":number}],
-  "improvements": string[],
-  "followUps": string[],
-  "titleSuggestions": string[],
-  "thumbnailText": string[]
-}
-
-Create a detailed but readable growth diagnosis for this YouTube video using public stats and comments.
-${JSON.stringify(body, null, 2)}
-`;
-  return callGeminiJson(prompt, { temperature: 0.34, maxOutputTokens: 1600 });
+  return callGeminiJson(prompt, fallback, { temperature: 0.25 });
 }
 
 async function generateCommunityReplies(body = {}) {
   const comments = normalizeArray(body.comments).slice(0, 40);
+  const fallback = {
+    comments: comments.map((comment) => ({
+      ...comment,
+      sentiment: comment.sentiment || sentimentFor(comment.text || ""),
+      importance: comment.importance || importanceFor(comment.text || ""),
+      suggestedReply: comment.suggestedReply || fallbackReply(comment.text || ""),
+    })),
+  };
   const prompt = `
-You are Contentus Community Manager. Return only JSON:
+You write reply drafts AS the creator, replying to their own YouTube viewers. Return only JSON:
 {"comments":[{"id":string,"author":string,"text":string,"sentiment":string,"importance":string,"suggestedReply":string,"videoIdea":string}]}
 
 Creator:
@@ -1148,33 +967,241 @@ ${JSON.stringify(body.dna || {}, null, 2)}
 Comments:
 ${JSON.stringify(comments, null, 2)}
 
-Rules: draft replies only. Do not claim replies are posted. Write like a real creator, not a support bot. Keep replies under 22 words unless the viewer asked a specific question. No heavy disclaimers unless safety requires it.
+Write each suggestedReply the way a real creator types a reply on their phone:
+- Short. Usually one sentence, sometimes two. Often under 12 words.
+- Sound like a person, not a brand. Casual, warm, a little personality. Lowercase and "haha", emojis, "ngl", etc. are fine if they fit the creator's voice.
+- Reply to the SPECIFIC thing the viewer said. Reference their actual words. Never generic ("Thanks for watching!", "Glad you enjoyed!").
+- If they asked a question, just answer it directly.
+- Match the creator's tone from their DNA. If their voice is chaotic/funny, be that. If calm, be that.
+
+Do NOT:
+- Add disclaimers, hedging, or "as an AI" anything.
+- Add hashtags, calls to subscribe, or marketing lines unless the creator clearly does that.
+- Over-apologize, over-explain, or sound customer-support-y.
+- Use corporate filler ("We appreciate your feedback", "Rest assured", "Kindly note").
+
+For toxic/troll comments: write a short, unbothered, classy reply (or note it is best ignored) — never escalate.
+sentiment = positive | neutral | negative. importance = high | medium | low (questions and repeated themes are high).
+videoIdea = a short next-video idea only when the comment clearly suggests one, else "".
 `;
-  const result = await callGeminiJson(prompt, { temperature: 0.4 });
-  const drafted = normalizeArray(result.comments);
-  if (!drafted.length && comments.length) throw new Error("Gemini did not return reply drafts.");
-  return { comments: drafted };
+  const result = await callGeminiJson(prompt, fallback, { temperature: 0.7 });
+  return { comments: normalizeArray(result.comments).length ? result.comments : fallback.comments };
 }
 
-async function generatePublishPack(body = {}) {
-  const prompt = `
-Return only JSON:
-{"title":string,"platforms":[{"name":string,"title":string,"caption":string,"description":string,"hashtags":string[],"notes":string}],"agentNotes":string[]}
+async function analyzeTrendsWithAi(body = {}) {
+  const regionCode = (body.regionCode || "US").toUpperCase().slice(0, 2);
+  const niche = body.niche || body.creator?.niche || "general creator content";
+  const platform = body.platform || "YouTube";
+  const categoryId = trendCategoryId(body.category);
 
-Create platform-specific publishing copy from one source video. Preserve Creator DNA. Do not claim direct posting to TikTok/Instagram unless API credentials exist.
-${JSON.stringify(body, null, 2)}
-`;
-  return callGeminiJson(prompt, { temperature: 0.42, maxOutputTokens: 1800 });
+  let sourceVideos = [];
+  let note = "";
+  if (configured(YOUTUBE_DATA_API_KEY)) {
+    try {
+      const data = await youtubeApi("videos", {
+        part: "snippet,statistics",
+        chart: "mostPopular",
+        regionCode,
+        videoCategoryId: categoryId,
+        maxResults: "20",
+      });
+      sourceVideos = normalizeArray(data.items).map((item) => ({
+        title: item.snippet?.title || "",
+        channel: item.snippet?.channelTitle || "",
+        views: Number(item.statistics?.viewCount || 0),
+        tags: normalizeArray(item.snippet?.tags).slice(0, 6),
+      })).filter((v) => v.title);
+    } catch (error) {
+      note = `Live YouTube trends could not be fetched (${error.message}); showing pattern-based analysis instead.`;
+    }
+  } else {
+    note = "Set YOUTUBE_DATA_API_KEY to pull live trending videos. Showing pattern-based analysis for now.";
+  }
+
+  const fallback = fallbackTrends(niche, platform, sourceVideos);
+  const prompt = `
+You are Contentus Trend Analyser. Help a specific creator ride trends without copying. Return only JSON:
+{
+  "summary": string,
+  "trends": [{ "title": string, "pattern": string, "why": string, "creatorAngle": string, "riskNote": string }],
+  "topics": string[],
+  "audioTrends": string[]
 }
 
-async function generateCoachReply(body = {}) {
-  const prompt = `
-Return only JSON: {"reply":string}
-You are Contentus Channel Coach. Give concrete, honest, creator-friendly strategy advice.
-Use the creator's saved DNA, ideas, scripts, and YouTube public data. Avoid generic motivational fluff.
-${JSON.stringify(body, null, 2)}
+Creator niche: ${niche}
+Platform: ${platform}
+Region: ${regionCode}
+${sourceVideos.length ? `Currently trending videos (real, from YouTube mostPopular):\n${JSON.stringify(sourceVideos.slice(0, 20), null, 2)}` : "No live trending feed available; infer durable trend patterns for this niche/platform."}
+Creator DNA: ${JSON.stringify(body.dna || {}, null, 2)}
+
+Rules: identify the underlying FORMAT/PATTERN behind what is trending, not just the topics. For each trend give a "creatorAngle" that fits THIS creator's niche and voice — never tell them to copy a video. "riskNote" flags saturation, fad risk, or licensing/audio concerns. "audioTrends" approximates trending sounds/music styles for the platform (note these are approximations, not licensed picks). Be honest when a trend is already saturated.
 `;
-  return callGeminiJson(prompt, { temperature: 0.45, maxOutputTokens: 1400 });
+  const result = await callGeminiJson(prompt, fallback, { temperature: 0.5 });
+  return {
+    summary: result.summary || fallback.summary,
+    trends: normalizeArray(result.trends).length ? result.trends : fallback.trends,
+    topics: normalizeArray(result.topics).length ? result.topics : fallback.topics,
+    audioTrends: normalizeArray(result.audioTrends).length ? result.audioTrends : fallback.audioTrends,
+    sourceVideos: sourceVideos.slice(0, 10),
+    note: [note, result.warning].filter(Boolean).join(" "),
+  };
+}
+
+function trendCategoryId(category) {
+  const map = {
+    "music": "10",
+    "gaming": "20",
+    "education": "27",
+    "science & tech": "28",
+    "tech": "28",
+    "entertainment": "24",
+    "people & blogs": "22",
+    "comedy": "23",
+    "howto & style": "26",
+    "sports": "17",
+    "news": "25",
+  };
+  return map[String(category || "").toLowerCase()] || undefined;
+}
+
+function fallbackTrends(niche, platform, sourceVideos = []) {
+  const topTitles = sourceVideos.slice(0, 6).map((v) => v.title);
+  return {
+    summary: `Pattern read for ${niche} on ${platform}: short, proof-led hooks and "I tried/tested X" framing keep outperforming generic explainers. Lead with a concrete result in the first 3 seconds.`,
+    trends: [
+      {
+        title: "Proof-over-promise experiments",
+        pattern: "Creator tests a claim on their own real workflow and shows the messy result.",
+        why: "Audiences trust demonstrated results more than advice.",
+        creatorAngle: `Run a real ${niche} experiment and show your actual before/after, including what failed.`,
+        riskNote: "Common format — your specific data and personality are what differentiate it.",
+      },
+      {
+        title: "Fast contrarian takes",
+        pattern: "A confident, specific counter-opinion delivered in under 45 seconds.",
+        why: "Sparks comments and shares through respectful disagreement.",
+        creatorAngle: `Name one popular ${niche} belief you think is wrong and back it with your experience.`,
+        riskNote: "Stay specific and fair — avoid rage-bait that damages trust.",
+      },
+    ],
+    topics: topTitles.length ? topTitles : [`${niche} myths`, `${niche} starter mistakes`, `behind-the-scenes of your ${niche} process`],
+    audioTrends: ["Upbeat lo-fi / chill beats for talking-head b-roll", "Punchy transition stingers for fast cuts", "Trending pop snippet for hook reveals (verify licensing before use)"],
+  };
+}
+
+async function analyzeVideoWithAi(body = {}) {
+  let youtubeContext = null;
+  let note = "";
+  if (body.youtubeUrl) {
+    youtubeContext = await fetchYouTubeContext(body.youtubeUrl);
+    if (youtubeContext?.note) note = youtubeContext.note;
+  }
+  if (!body.media && !youtubeContext) {
+    note = "Add a YouTube URL or upload a video/clip to analyze.";
+  }
+
+  const fallback = fallbackVideoCheck(body, youtubeContext);
+  const prompt = `
+You are Contentus Video Checker. Review a creator's video before they publish and give honest, specific feedback. Return only JSON:
+{
+  "scoreOverall": number,
+  "verdict": "Ready to post" | "Fix a few things" | "Needs work",
+  "hookStrength": number,
+  "retention": number,
+  "pacing": number,
+  "audio": number,
+  "clarity": number,
+  "firstThreeSeconds": string,
+  "strengths": string[],
+  "improvements": string[],
+  "thumbnailAdvice": string,
+  "titleAdvice": string
+}
+
+Goal of the video: ${body.goal || "grow and retain audience"}
+Creator: ${JSON.stringify(body.creator || {}, null, 2)}
+Creator DNA: ${JSON.stringify(body.dna || {}, null, 2)}
+${youtubeContext ? `YouTube context:\n${JSON.stringify(youtubeContext, null, 2)}` : ""}
+${body.media ? "An uploaded video/clip is attached — analyze the actual footage (hook, pacing, audio, visuals, retention risks)." : "No footage attached; base feedback on the provided title/description/transcript context."}
+
+Rules: all numeric scores are 0-100 and honest — do not inflate. "firstThreeSeconds" critiques the opening hook specifically. "improvements" are concrete, ordered by impact. Be willing to say a video needs work.
+`;
+  const result = await callGeminiJson(prompt, fallback, { media: body.media, temperature: 0.4 });
+  return {
+    ...fallback,
+    ...result,
+    note: [note, result.warning].filter(Boolean).join(" "),
+  };
+}
+
+function fallbackVideoCheck(body = {}, youtubeContext = null) {
+  const hasTranscript = Boolean(youtubeContext?.transcript);
+  return {
+    scoreOverall: youtubeContext || body.media ? 74 : 0,
+    verdict: youtubeContext || body.media ? "Fix a few things" : "Needs work",
+    hookStrength: 70,
+    retention: 68,
+    pacing: 72,
+    audio: 75,
+    clarity: 76,
+    firstThreeSeconds: hasTranscript
+      ? "Your opening states the topic but doesn't promise a payoff. Lead with the result or the stakes instead of the setup."
+      : "Make sure the first line names a concrete payoff or tension within 3 seconds — don't open with a greeting or channel intro.",
+    strengths: ["Clear topic focus.", "Consistent on-camera energy."],
+    improvements: [
+      "Cut the first 2-4 seconds so the hook lands immediately.",
+      "Add on-screen text reinforcing the promise during the intro.",
+      "Tighten any section longer than ~20 seconds without a visual change.",
+    ],
+    thumbnailAdvice: "Use 3-4 high-contrast words that match the spoken hook; avoid vague AI phrasing.",
+    titleAdvice: "Front-load the specific outcome or number; keep it under ~60 characters.",
+  };
+}
+
+async function generateThumbnailImage(body = {}) {
+  const title = (body.title || body.idea?.title || "Creator idea").slice(0, 120);
+  const subtitle = (body.subtitle || "").slice(0, 80);
+  const style = body.style || "clean proof";
+  const palette = body.palette || "high-contrast cyan, coral, gold on near-black";
+  const imagePrompt = `A bold, high-contrast 16:9 YouTube thumbnail background, ${style} style, color palette: ${palette}. Cinematic lighting, strong focal subject, lots of negative space on the left for large headline text, no text rendered in the image, no watermark, photoreal but punchy. Theme: ${title}. ${subtitle ? `Secondary idea: ${subtitle}.` : ""} ${body.dna?.visual ? `Match this creator's visual style: ${body.dna.visual}.` : ""}`.trim();
+
+  const image = await callGeminiImage(imagePrompt);
+  if (!image.data) {
+    return {
+      image: null,
+      prompt: imagePrompt,
+      note: image.warning || "Image generation is unavailable (billing-enabled Gemini image model required). Use the local canvas designer meanwhile.",
+    };
+  }
+  return { image, prompt: imagePrompt, note: "" };
+}
+
+async function callGeminiImage(prompt) {
+  if (!configured(GEMINI_API_KEY)) return { warning: "GEMINI_API_KEY not configured." };
+  const model = process.env.GEMINI_IMAGE_MODEL || "gemini-2.0-flash-preview-image-generation";
+  try {
+    const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: { responseModalities: ["TEXT", "IMAGE"], temperature: 0.8 },
+      }),
+    });
+    const text = await result.text();
+    const payload = text ? JSON.parse(text) : {};
+    if (!result.ok) {
+      return { warning: payload.error?.message || `Image request failed with ${result.status}` };
+    }
+    const parts = payload.candidates?.[0]?.content?.parts || [];
+    const inline = parts.find((part) => part.inline_data?.data || part.inlineData?.data);
+    const data = inline?.inline_data?.data || inline?.inlineData?.data || "";
+    const mimeType = inline?.inline_data?.mime_type || inline?.inlineData?.mimeType || "image/png";
+    if (!data) return { warning: "Model returned no image data." };
+    return { data, mimeType };
+  } catch (error) {
+    return { warning: error.message };
+  }
 }
 
 async function fetchYouTubeChannel(input = "") {
@@ -1245,32 +1272,6 @@ async function fetchYouTubeChannel(input = "") {
     };
   } catch (error) {
     return { status: 502, payload: { error: "YouTube request failed", message: error.message } };
-  }
-}
-
-async function fetchYouTubeTrendingVideos(niche = "") {
-  if (!configured(YOUTUBE_DATA_API_KEY)) return [];
-  try {
-    const data = await youtubeApi("videos", {
-      part: "snippet,statistics",
-      chart: "mostPopular",
-      regionCode: process.env.YOUTUBE_REGION_CODE || "US",
-      maxResults: "12",
-    });
-    const words = String(niche || "").toLowerCase().split(/\W+/).filter((word) => word.length > 3);
-    return normalizeArray(data.items)
-      .map((video) => ({
-        title: video.snippet?.title || "",
-        channelTitle: video.snippet?.channelTitle || "",
-        views: Number(video.statistics?.viewCount || 0),
-        likes: Number(video.statistics?.likeCount || 0),
-        comments: Number(video.statistics?.commentCount || 0),
-        publishedAt: video.snippet?.publishedAt || "",
-      }))
-      .filter((video) => !words.length || words.some((word) => `${video.title} ${video.channelTitle}`.toLowerCase().includes(word)))
-      .slice(0, 8);
-  } catch {
-    return [];
   }
 }
 
@@ -1397,9 +1398,9 @@ async function youtubeApi(resource, params = {}) {
   return data;
 }
 
-async function callGeminiJson(prompt, options = {}) {
-  if (!configured(GEMINI_API_KEY)) throw new Error("Gemini API key is missing. Set GEMINI_API_KEY in .env and restart the server.");
-  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+async function callGeminiJson(prompt, fallback, options = {}) {
+  if (!configured(GEMINI_API_KEY)) return fallback;
+  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
   const parts = [{ text: prompt }];
   if (options.media?.data && options.media?.mimeType) {
     parts.push({
@@ -1424,82 +1425,27 @@ async function callGeminiJson(prompt, options = {}) {
       }),
     });
     const text = await result.text();
-    const payload = parseMaybeJson(text);
+    const payload = text ? JSON.parse(text) : {};
     if (!result.ok) {
-      throw new Error(payload.error?.message || `Gemini request failed with ${result.status}`);
+      return { ...fallback, warning: payload.error?.message || `Gemini request failed with ${result.status}` };
     }
     const output = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
-    const parsed = parseJsonOutput(output);
-    if (!parsed) throw new Error("Gemini did not return valid JSON. Try again with a more specific prompt.");
-    return parsed;
+    return parseJsonOutput(output, fallback);
   } catch (error) {
-    throw new Error(error.message || "Gemini request failed.");
+    return { ...fallback, warning: error.message };
   }
 }
 
-async function callGeminiImage(prompt, options = {}) {
-  if (!configured(GEMINI_API_KEY)) throw new Error("Gemini API key is missing. Set GEMINI_API_KEY in .env and restart the server.");
-  const model = process.env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image";
-  try {
-    const result = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        model,
-        input: [{ type: "text", text: prompt }],
-        response_format: {
-          type: "image",
-          mime_type: options.mimeType || "image/png",
-          aspect_ratio: options.aspectRatio || "16:9",
-          image_size: options.imageSize || "1K",
-        },
-      }),
-    });
-    const text = await result.text();
-    const payload = parseMaybeJson(text);
-    if (!result.ok) throw new Error(payload.error?.message || `Gemini image request failed with ${result.status}`);
-    const directImage = payload.output_image || payload.outputImage;
-    if (directImage?.data) {
-      return {
-        imageData: directImage.data,
-        imageMimeType: directImage.mime_type || directImage.mimeType || "image/png",
-      };
-    }
-    const outputBlocks = normalizeArray(payload.output || payload.outputs || payload.response);
-    const imageBlock = outputBlocks.find((block) => (block.type === "image" || block.mime_type || block.mimeType) && block.data);
-    if (imageBlock?.data) {
-      return {
-        imageData: imageBlock.data,
-        imageMimeType: imageBlock.mime_type || imageBlock.mimeType || "image/png",
-      };
-    }
-    throw new Error(`Gemini image model "${model}" did not return image data. Set GEMINI_IMAGE_MODEL to an image-capable Gemini model such as gemini-3.1-flash-image.`);
-  } catch (error) {
-    throw new Error(error.message || "Gemini image generation failed.");
-  }
-}
-
-function parseMaybeJson(text) {
-  try {
-    return text ? JSON.parse(text) : {};
-  } catch {
-    return { raw: text };
-  }
-}
-
-function parseJsonOutput(output) {
+function parseJsonOutput(output, fallback) {
   try {
     return JSON.parse(output);
   } catch {
     const match = output.match(/```(?:json)?\s*([\s\S]*?)```/) || output.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-    if (!match) return null;
+    if (!match) return fallback;
     try {
       return JSON.parse(match[1]);
     } catch {
-      return null;
+      return fallback;
     }
   }
 }
@@ -1531,29 +1477,6 @@ function fallbackDna(body = {}, youtubeContext = null, mediaNote = "") {
   };
 }
 
-function fallbackTrendReport(body = {}, youtubeTrends = []) {
-  const hasIdea = Boolean(body.idea);
-  const trendTitles = youtubeTrends.map((item) => item.title).filter(Boolean);
-  return {
-    platform: body.platform || "Platform",
-    verdict: hasIdea ? "Promising if you add a sharper personal angle" : "Trend brief ready",
-    hitScore: hasIdea ? 72 : 64,
-    momentumScore: youtubeTrends.length ? 78 : 58,
-    hitOrMiss: hasIdea ? "Lean hit, but only if the idea has proof, a clear stance, and a non-copycat hook." : "Add an idea to get a hit-or-miss score.",
-    whyNow: youtubeTrends.length ? "Recent popular videos show attention around adjacent topics." : "Live trend access is limited for this platform, so verify inside the platform before publishing.",
-    creatorAngle: "Use the trend as context, then lead with your own test, story, evidence, or opinion.",
-    copyRisk: "Medium",
-    audioOpportunity: /short|tiktok|reel/i.test(body.platform || "") ? "Check native app trending audio before posting." : "Audio matters less than title, intro, and retention for long-form.",
-    topics: trendTitles.length ? trendTitles : [body.niche || "Creator niche", "Audience pain point", "Proof-based experiment"],
-    audioSignals: ["Use native platform audio only when it supports the idea.", "Avoid copying a trend beat-for-beat.", "Prioritize clarity over noise."],
-    angles: [
-      `Test ${body.idea || body.niche || "the trend"} with a real example.`,
-      "Compare the common take with your actual experience.",
-      "Turn the trend into a useful checklist for your audience.",
-    ],
-  };
-}
-
 function fallbackIdeas(body = {}) {
   const topic = body.topic || "creator workflow";
   const platform = body.platform || "YouTube";
@@ -1572,6 +1495,10 @@ function fallbackIdeas(body = {}) {
       longFormVersion: "Document the full process, mistakes, results, and next system.",
       genericRisk: "Low",
       authenticityScore: 84,
+      hitProbability: 71,
+      verdict: "Likely hit",
+      hitReasons: ["Clear before/after arc keeps people watching for the result.", "Proof-based format builds trust instead of hype."],
+      missRisks: ["Needs a strong first-line hook or the payoff feels far away."],
       personalizationTip: "Add one screenshot, old draft, calendar, voice note, or behind-the-scenes proof from your own process.",
       cta: "Ask viewers what they want you to test next.",
       disclosure: "Brainstormed with AI, written and edited by me.",
@@ -1589,6 +1516,10 @@ function fallbackIdeas(body = {}) {
       longFormVersion: "Analyze multiple examples and build a reusable checklist.",
       genericRisk: "Medium",
       authenticityScore: 79,
+      hitProbability: 52,
+      verdict: "Coin flip",
+      hitReasons: ["Mistake-and-fix framing is highly shareable.", "Teaches without telling people to copy a voice."],
+      missRisks: ["The 'sounds generic' angle is getting crowded — needs a sharper, specific example.", "Payoff is educational, so it leans on a strong thumbnail/title to earn the click."],
       personalizationTip: "Use a sentence you actually rejected and explain why.",
       cta: "Invite people to paste a line they want rewritten.",
       disclosure: "AI-assisted if Contentus helped rewrite.",
@@ -1599,12 +1530,9 @@ function fallbackIdeas(body = {}) {
 function fallbackScript(body = {}, targetWords = 150) {
   const idea = body.idea?.title || body.idea || body.existingScript?.title || "Creator idea";
   const format = body.format || body.existingScript?.format || "talking head";
-  const subject = String(idea).replace(/^I Tested\s+/i, "").trim();
-  const beats = buildFallbackScriptBeats(subject, targetWords, body);
-  const script = beats.map((beat) => beat.spokenLines).join("\n\n");
+  const script = expandScriptLocally(`Okay, so everyone keeps talking about ${idea} — so I actually tried it, and here's what really happened.`, targetWords, body);
   return {
     title: idea,
-    logline: `A ${format} script with a clear stance, proof moments, and exact spoken lines.`,
     targetLength: body.length || "60 seconds",
     authenticityScore: 82,
     genericRisk: "Low",
@@ -1615,97 +1543,21 @@ function fallbackScript(body = {}, targetWords = 150) {
       "This sounded like a good idea until I tried it in my actual workflow.",
       "I wanted faster content, but I did not want to sound like everyone else.",
     ],
-    coldOpen: beats[0]?.spokenLines || "",
-    intro: beats[1]?.spokenLines || "",
-    beats: beats.slice(2, -1),
-    outro: beats.at(-1)?.spokenLines || "",
     script,
-    scenes: beats.map((beat) => beat.title),
+    scenes: [
+      "Cold open with the real problem.",
+      `Show the ${format} setup and why the audience should care.`,
+      "Walk through the test or story beats.",
+      "Reveal the useful result and the honest limitation.",
+      "Close with a specific viewer action.",
+    ],
     voiceover: "Keep the voice direct, specific, and rooted in the creator's own proof.",
-    visualNotes: beats.map((beat) => beat.visual),
     shotList: ["Creator on camera", "Proof artifact", "Screen recording", "Before/after line", "Final takeaway"],
     broll: ["Notes app", "Timeline or calendar", "Draft comparison", "Audience comment", "Publishing checklist"],
     onScreenText: ["The problem", "The test", "The result", "Make it yours"],
-    credibilityNotes: ["Verify any safety, health, child-development, or performance claims before publishing.", "Separate personal opinion from factual claim."],
     caption: `${idea}. Created with Creator DNA and checked for generic risk.`,
     hashtags: ["#creatorworkflow", "#contentstrategy", "#aicreator"],
     endingOptions: ["Want the exact workflow?", "Which version sounds more human?", "Send me the next idea to test."],
-  };
-}
-
-function buildFallbackScriptBeats(subject, targetWords, body = {}) {
-  const audience = body.audience || "your audience";
-  const base = [
-    {
-      time: "0:00",
-      title: "Cold open",
-      intent: "Make the viewer instantly understand the tension.",
-      spokenLines: `Some videos look harmless until you ask what they are teaching people to repeat. Today I am looking at ${subject}, not to panic, but to figure out what is actually going on and what parents, creators, or viewers should pay attention to.`,
-      visual: "Open on the creator speaking directly, then cut to blurred/example-safe context.",
-    },
-    {
-      time: "0:12",
-      title: "Setup",
-      intent: "Explain the question without overclaiming.",
-      spokenLines: `The question is not "is this automatically bad?" That is too lazy. The better question is: what does this content reward, who is it aimed at, and does the joke stop being funny when kids start copying it?`,
-      visual: "Show a simple three-question checklist on screen.",
-    },
-    {
-      time: "0:35",
-      title: "What I checked",
-      intent: "Give structure and credibility.",
-      spokenLines: `I am checking three things: the language, the behavior the game rewards, and how easy it is for a younger viewer to misunderstand the point. I am also separating my opinion from facts, because this topic gets messy fast.`,
-      visual: "Checklist fills in: language, rewarded behavior, kid interpretation.",
-    },
-    {
-      time: "1:10",
-      title: "The useful middle",
-      intent: "Provide the core argument.",
-      spokenLines: `The biggest issue is usually not one scary clip. It is repetition. If a kid sees the same joke, the same insult, or the same chaotic reward loop again and again, it can start to feel normal. That does not mean every player is harmed. It means adults should look at patterns, not just labels.`,
-      visual: "Show pattern/repetition graphic, not sensational footage.",
-    },
-    {
-      time: "2:00",
-      title: "Balanced takeaway",
-      intent: "Stay trustworthy.",
-      spokenLines: `So my take is this: do not treat every weird Roblox trend like an emergency, but also do not ignore it because it is "just a game." Watch a few minutes, listen to the words, check the comments, and ask whether the joke is something you would be okay hearing offline.`,
-      visual: "Creator on camera with calm pacing.",
-    },
-    {
-      time: "Final",
-      title: "Ending",
-      intent: "Give a clear CTA.",
-      spokenLines: `If you want, send me one game or trend you are unsure about, and I will break it down using this same checklist. Not fear, not hype, just a clear look at what the content is actually doing.`,
-      visual: "End card with the checklist and comment prompt.",
-    },
-  ];
-  if (targetWords <= 160) return [base[0], base[2], base[4], base[5]];
-  if (targetWords <= 360) return base;
-  const expanded = [...base];
-  while (expanded.map((beat) => beat.spokenLines).join(" ").split(/\s+/).length < targetWords) {
-    expanded.splice(-1, 0, {
-      time: "Deep dive",
-      title: "Example lens",
-      intent: "Add detail without inventing facts.",
-      spokenLines: `For ${audience}, the practical move is to pause before reacting. Ask: is the content asking for skill, creativity, social pressure, or shock? Those are very different signals. A game can be chaotic and still be fine, but when the main reward is humiliating someone, repeating a phrase, or chasing a harmful stereotype, that deserves a closer look.`,
-      visual: "Show the four signal words as clean labels.",
-    });
-  }
-  return expanded;
-}
-
-function fallbackCredibility(script = {}) {
-  return {
-    score: 78,
-    verdict: "Mostly usable, needs clearer proof",
-    claimRisk: /children|health|money|safety|bad for/i.test(JSON.stringify(script)) ? "Medium-high" : "Medium",
-    trustScore: 76,
-    originality: 82,
-    suggestions: [
-      { title: "Separate opinion from fact", reason: "The audience should know what is your take versus verified evidence.", implementation: "Add a line that says: this is my read from the examples I checked, not a medical or safety claim." },
-      { title: "Add proof moment", reason: "A concrete example makes the script less generic.", implementation: "Add one real example, screenshot, viewer comment, or clip description before the main takeaway." },
-      { title: "Soften overclaims", reason: "Avoid saying something is definitely harmful unless you cite a source.", implementation: "Replace absolute claims with pattern-based language like 'can normalize' or 'is worth checking'." },
-    ],
   };
 }
 
@@ -1713,12 +1565,12 @@ function expandScriptLocally(seed, targetWords, body = {}) {
   const idea = body.idea?.title || body.idea || "this idea";
   const beats = [
     seed,
-    `Here is the honest setup: ${idea} sounds simple when it is just a note, but content gets harder when it has to fit a real audience, a real platform, and a voice people recognize.`,
-    "So first I am showing the messy version. This is the part most polished tutorials skip, but it is the part that makes the result believable.",
-    "Next I am turning that mess into a structure: hook, proof, useful middle, personal detail, and a clear ending. The goal is not to make it perfect. The goal is to make it sound like a person with a point of view.",
-    "Now I am checking the draft for generic language. If a line sounds like it could belong to anyone, I rewrite it with a detail only this creator would say.",
-    "The useful lesson is that speed only matters when the output still carries your taste. Faster generic content is still generic content.",
-    "So the next step is simple: use this as a starting point, add your own proof, remove inflated claims, and publish the version your audience can trust.",
+    `Quick context, because it matters: ${idea} sounds great on paper, but the moment you actually do it, a few things get weird.`,
+    "First thing I noticed — the part nobody really warns you about — is that the easy version and the real version are not the same thing at all.",
+    "So here's what I actually did. I kept it simple, I tracked what worked, and I paid attention to the parts that felt off.",
+    "And the result? Honestly, not what I expected. The useful bit wasn't the shiny promise — it was the small thing it changed in how I work.",
+    "If you take one thing from this: don't copy it line for line. Steal the idea, make it yours, and cut anything that doesn't sound like you.",
+    "That's basically it. If you want me to go deeper on any part of this, tell me in the comments and I'll make the next one.",
   ];
   const words = [];
   while (words.length < targetWords) {
@@ -1769,86 +1621,6 @@ function fallbackThumbnailCopy(title) {
     { text: "AI Exposed This", reason: "Curiosity without a false claim." },
     { text: "Before vs After", reason: "Easy to understand visually." },
   ];
-}
-
-function fallbackThumbnailDesign(body = {}) {
-  const main = String(body.mainText || body.idea?.title || "BIG IDEA").split(/\s+/).slice(0, 5).join(" ");
-  return {
-    title: main,
-    mainText: main,
-    supportText: body.brief ? "REAL TAKE" : "",
-    palette: "white teal charcoal",
-    textSize: main.length > 22 ? 72 : 94,
-    textWeight: "900",
-    textBox: { x: 76, y: 150, w: 690, lineHeight: main.length > 22 ? 82 : 100 },
-    focalBox: body.selection?.w > 30 ? body.selection : { x: 820, y: 95, w: 340, h: 500 },
-    rationale: "Built a high-contrast thumbnail plan with short text, one focal area, and a clear reading path.",
-  };
-}
-
-function fallbackVideoCheck(body = {}, youtubeContext = null) {
-  return {
-    title: youtubeContext?.title || "Video analysis",
-    totalScore: 74,
-    audioScore: body.media ? 72 : 66,
-    visualScore: body.media ? 73 : 68,
-    titleScore: youtubeContext?.title ? 78 : 70,
-    thumbnailScore: 70,
-    pacingScore: 72,
-    targetAudience: body.context || "Audience needs more context",
-    summary: "The idea is understandable, but the report needs real video/audio data for a sharper score. Improve clarity, proof, and opening pace first.",
-    working: ["The topic has a clear viewer question.", "A direct creator explanation can build trust."],
-    improvements: ["Open with the conflict faster.", "Add a specific proof moment.", "Make the title less broad and more outcome-driven."],
-    audienceFit: "Currently fits viewers who want a practical explanation, not hype.",
-    editChecklist: ["Check first 10 seconds.", "Normalize audio loudness.", "Use readable thumbnail text.", "Add source/proof for claims."],
-  };
-}
-
-function fallbackDetailedVideo(video = {}) {
-  const views = Number(video.views || 0);
-  const likes = Number(video.likes || 0);
-  const comments = Number(video.comments || 0);
-  const engagement = views ? Math.min(100, Math.round(((likes + comments) / views) * 1000)) : 45;
-  return {
-    verdict: "Good base, needs sharper packaging",
-    graphs: [
-      { label: "Click strength", value: Math.min(92, video.thumbnail ? 68 : 52) },
-      { label: "Engagement", value: engagement },
-      { label: "Repeat potential", value: 74 },
-      { label: "Comment fuel", value: comments ? 78 : 42 },
-    ],
-    improvements: ["Rewrite the title around the viewer payoff.", "Use the first comment questions as follow-up ideas.", "Test a thumbnail with fewer words and one obvious focal point."],
-    followUps: ["A direct sequel answering the biggest objection.", "A short-form version with the strongest moment first.", "A community post asking what viewers want tested next."],
-    titleSuggestions: [`What ${video.title || "This Video"} Actually Shows`, "I Tested This So You Don't Have To", "The Part Everyone Missed"],
-    thumbnailText: ["REAL TEST", "BAD IDEA?", "I CHECKED"],
-  };
-}
-
-function fallbackPublishPack(body = {}) {
-  const title = body.title || body.video?.title || "Untitled video";
-  const platforms = normalizeArray(body.platforms).length ? body.platforms : ["YouTube", "TikTok", "Instagram Reels"];
-  return {
-    title,
-    platforms: platforms.map((platform) => ({
-      name: platform,
-      title: platform === "YouTube" ? title : title.slice(0, 70),
-      caption: `My take on ${title}. Built from the original video, adjusted for ${platform}.`,
-      description: `A platform-ready version of ${title}. Add final creator review before posting.`,
-      hashtags: ["#creator", "#content", "#original"],
-      notes: platform === "YouTube" ? "Can be uploaded through Google OAuth upload scope." : "Export-ready copy. Direct posting needs that platform's business API credentials.",
-    })),
-    agentNotes: ["Review platform rules before posting.", "Do not repost the exact same edit everywhere if audience expectations differ.", "Keep disclosures consistent."],
-  };
-}
-
-function fallbackCoachReply(body = {}) {
-  const hasYoutube = Boolean(body.youtube?.channel);
-  const ideaCount = normalizeArray(body.ideas).length;
-  return [
-    hasYoutube ? `Your next move should start from the videos that already have comments, not from a blank trend chase.` : `First link your YouTube channel so I can use real video signals instead of guessing.`,
-    ideaCount ? `You already have ${ideaCount} saved ideas. Pick one and make the hook more specific before generating more.` : `Create 3 ideas around one niche problem before jumping into scripts.`,
-    `A strong next step: make one proof-based video, one short answer to a viewer question, and one community post asking what people want tested next.`,
-  ].join("\n\n");
 }
 
 function fallbackAuthenticity(text = "", dna = {}) {
@@ -1952,10 +1724,10 @@ function importanceFor(text = "") {
 }
 
 function fallbackReply(text = "") {
-  if (/\?|how|can you|show/i.test(text)) return "Yeah, I can make a follow-up and show the exact steps.";
-  if (/love|thanks|helped/i.test(text)) return "Thank you. Glad it actually helped.";
-  if (/wrong|copied|bad|fake/i.test(text)) return "Fair point. I’ll add clearer proof next time.";
-  return "Appreciate you watching. Noted for the next one.";
+  if (/\?|how|can you|show/i.test(text)) return "Yes. I can turn this into a clearer walkthrough and show the exact process in a follow-up.";
+  if (/love|thanks|helped/i.test(text)) return "Thank you. I am glad it helped, and I will keep the next one just as practical.";
+  if (/wrong|copied|bad|fake/i.test(text)) return "Fair pushback. I will make the next version more specific with my own proof and clearer sources.";
+  return "Appreciate you watching. I am noting this for the next version.";
 }
 
 function stripHtml(value = "") {
