@@ -35,89 +35,38 @@ const defaultState = {
   google: null,
   googleCalendarEvents: [],
   selectedVideoId: "",
-  tutorialCompleted: false,
-  tutorialStep: 0,
+  scriptChats: [],
+  activeScriptChatId: "",
+  scriptAssistantOpen: true,
+  scriptCredibilityReport: null,
+  thumbnailChats: [],
+  activeThumbnailChatId: "",
+  thumbnailSelection: null,
+  trendReports: [],
+  videoChecks: [],
+  detailedVideoReports: [],
+  publishingJobs: [],
+  coachChats: [],
   calendarViewDate: "",
+  selectedCalendarDate: "",
 };
 
 const analytics = {
-  channel: "Rish Creates",
-  subscribers: 48200,
+  channel: "",
+  subscribers: 0,
   summary: {
-    averageViews: 18200,
-    watchTime: "1.9K hrs",
-    retention: "47%",
-    ctr: "7.8%",
-    engagement: "9.4%",
-    growth: "+1,240",
+    averageViews: 0,
+    watchTime: "0 hrs",
+    retention: "0%",
+    ctr: "0%",
+    engagement: "0%",
+    growth: "0",
   },
-  views: [12, 18, 16, 28, 24, 38, 44, 41, 52, 66, 61, 74],
-  videos: [
-    {
-      id: "yt-1",
-      title: "I Let AI Plan My Study Week",
-      views: 82000,
-      likes: 7200,
-      comments: 638,
-      retention: 58,
-      ctr: 9.8,
-      format: "Experiment",
-      topic: "AI study systems",
-      diagnosis: "Personal experiment plus useful takeaway. The audience stayed because the proof arrived early.",
-    },
-    {
-      id: "yt-2",
-      title: "5 Apps Every Student Needs",
-      views: 14300,
-      likes: 900,
-      comments: 74,
-      retention: 31,
-      ctr: 4.1,
-      format: "List",
-      topic: "Productivity tools",
-      diagnosis: "Clear title, but the angle is generic. Add a stronger personal filter and a specific outcome.",
-    },
-    {
-      id: "yt-3",
-      title: "My Exam Week Reset Routine",
-      views: 36500,
-      likes: 3100,
-      comments: 288,
-      retention: 49,
-      ctr: 8.2,
-      format: "Vlog tutorial",
-      topic: "Study routine",
-      diagnosis: "Strong comments because it felt real. Shorten the intro by 8 seconds.",
-    },
-  ],
+  views: [],
+  videos: [],
 };
 
-const comments = [
-  {
-    id: "com-1",
-    author: "Anaya",
-    text: "Can you show the exact prompt you used for the AI schedule?",
-    sentiment: "asking questions",
-    importance: "high",
-    suggestedReply: "Yes. I will drop the exact prompt in the next video and pin a cleaner version here too.",
-  },
-  {
-    id: "com-2",
-    author: "Dev",
-    text: "This made me feel better about my messy routine lol",
-    sentiment: "positive",
-    importance: "medium",
-    suggestedReply: "That was the goal. We are all pretending to be organized until the calendar exposes us.",
-  },
-  {
-    id: "com-3",
-    author: "Unknown",
-    text: "This is just copied from every AI productivity video.",
-    sentiment: "critical",
-    importance: "medium",
-    suggestedReply: "Fair pushback. I tried to make it specific by showing my real week, but I can go deeper into the results next time.",
-  },
-];
+const comments = [];
 
 let state = loadState();
 let activeRoute = normalizeRoute(location.hash);
@@ -132,7 +81,7 @@ let appConfig = {
     sessionSecret: false,
   },
   authProvider: "not-configured",
-  aiProvider: "local-fallback",
+  aiProvider: "not-configured",
 };
 let saveTimer = null;
 
@@ -165,9 +114,20 @@ function mergeState(base, saved) {
     google: isLegacyDemo ? null : (saved.google || null),
     googleCalendarEvents: isLegacyDemo ? [] : (Array.isArray(saved.googleCalendarEvents) ? saved.googleCalendarEvents : cleanBase.googleCalendarEvents),
     selectedVideoId: isLegacyDemo ? "" : (saved.selectedVideoId || ""),
-    tutorialCompleted: isLegacyDemo ? false : Boolean(saved.tutorialCompleted),
-    tutorialStep: isLegacyDemo ? 0 : Number(saved.tutorialStep || 0),
+    scriptChats: isLegacyDemo ? [] : (Array.isArray(saved.scriptChats) ? saved.scriptChats : cleanBase.scriptChats),
+    activeScriptChatId: isLegacyDemo ? "" : (saved.activeScriptChatId || ""),
+    scriptAssistantOpen: saved.scriptAssistantOpen !== false,
+    scriptCredibilityReport: isLegacyDemo ? null : (saved.scriptCredibilityReport || null),
+    thumbnailChats: isLegacyDemo ? [] : (Array.isArray(saved.thumbnailChats) ? saved.thumbnailChats : cleanBase.thumbnailChats),
+    activeThumbnailChatId: isLegacyDemo ? "" : (saved.activeThumbnailChatId || ""),
+    thumbnailSelection: isLegacyDemo ? null : (saved.thumbnailSelection || null),
+    trendReports: isLegacyDemo ? [] : (Array.isArray(saved.trendReports) ? saved.trendReports : cleanBase.trendReports),
+    videoChecks: isLegacyDemo ? [] : (Array.isArray(saved.videoChecks) ? saved.videoChecks : cleanBase.videoChecks),
+    detailedVideoReports: isLegacyDemo ? [] : (Array.isArray(saved.detailedVideoReports) ? saved.detailedVideoReports : cleanBase.detailedVideoReports),
+    publishingJobs: isLegacyDemo ? [] : (Array.isArray(saved.publishingJobs) ? saved.publishingJobs : cleanBase.publishingJobs),
+    coachChats: isLegacyDemo ? [] : (Array.isArray(saved.coachChats) ? saved.coachChats : cleanBase.coachChats),
     calendarViewDate: isLegacyDemo ? "" : (saved.calendarViewDate || ""),
+    selectedCalendarDate: isLegacyDemo ? "" : (saved.selectedCalendarDate || ""),
   };
 
   if (isLegacyDemo) {
@@ -457,6 +417,36 @@ document.addEventListener("drop", (event) => {
   }
 });
 
+let thumbnailDragStart = null;
+
+document.addEventListener("pointerdown", (event) => {
+  const canvasNode = event.target.closest?.("#thumbnail-canvas");
+  if (!canvasNode || activeRoute !== "/app/thumbnail") return;
+  const rect = canvasNode.getBoundingClientRect();
+  thumbnailDragStart = {
+    x: ((event.clientX - rect.left) / rect.width) * canvasNode.width,
+    y: ((event.clientY - rect.top) / rect.height) * canvasNode.height,
+  };
+});
+
+document.addEventListener("pointerup", (event) => {
+  const canvasNode = document.querySelector("#thumbnail-canvas");
+  if (!thumbnailDragStart || !canvasNode || activeRoute !== "/app/thumbnail") return;
+  const rect = canvasNode.getBoundingClientRect();
+  const x = ((event.clientX - rect.left) / rect.width) * canvasNode.width;
+  const y = ((event.clientY - rect.top) / rect.height) * canvasNode.height;
+  state.thumbnailSelection = {
+    x: Math.round(Math.min(thumbnailDragStart.x, x)),
+    y: Math.round(Math.min(thumbnailDragStart.y, y)),
+    w: Math.round(Math.abs(x - thumbnailDragStart.x)),
+    h: Math.round(Math.abs(y - thumbnailDragStart.y)),
+  };
+  thumbnailDragStart = null;
+  redrawActiveThumbnail();
+  saveState();
+  toast("Area selected for thumbnail edits.");
+});
+
 function closeMobileSidebar() {
   document.querySelector(".sidebar")?.classList.remove("is-open");
 }
@@ -487,7 +477,7 @@ function render() {
 
   app.className = "app-root";
   app.innerHTML = appShellV4(activeRoute);
-  requestAnimationFrame(positionTutorialSpotlight);
+  if (activeRoute === "/app/thumbnail") requestAnimationFrame(redrawActiveThumbnail);
 }
 
 function landingView() {
@@ -686,7 +676,7 @@ function authView() {
         </p>
         <div class="hero-proof">
           <span class="chip">${appConfig.integrations.supabase ? "Supabase connected" : "Supabase not configured"}</span>
-          <span class="chip">${appConfig.integrations.gemini ? "Gemini key detected" : "Gemini fallback mode"}</span>
+          <span class="chip">${appConfig.integrations.gemini ? "Gemini key detected" : "Gemini key needed"}</span>
           <span class="chip">${appConfig.integrations.youtubeData ? "YouTube key detected" : "Mock YouTube data"}</span>
         </div>
       </div>
@@ -2097,9 +2087,20 @@ function mergeStateV4(base, saved = {}) {
     google: isLegacyDemo ? null : (saved.google || null),
     googleCalendarEvents: isLegacyDemo ? [] : normalizeList(saved.googleCalendarEvents),
     selectedVideoId: isLegacyDemo ? "" : (saved.selectedVideoId || ""),
-    tutorialCompleted: isLegacyDemo ? false : Boolean(saved.tutorialCompleted),
-    tutorialStep: isLegacyDemo ? 0 : Number(saved.tutorialStep || 0),
+    scriptChats: isLegacyDemo ? [] : normalizeList(saved.scriptChats),
+    activeScriptChatId: isLegacyDemo ? "" : (saved.activeScriptChatId || ""),
+    scriptAssistantOpen: saved.scriptAssistantOpen !== false,
+    scriptCredibilityReport: isLegacyDemo ? null : (saved.scriptCredibilityReport || null),
+    thumbnailChats: isLegacyDemo ? [] : normalizeList(saved.thumbnailChats),
+    activeThumbnailChatId: isLegacyDemo ? "" : (saved.activeThumbnailChatId || ""),
+    thumbnailSelection: isLegacyDemo ? null : (saved.thumbnailSelection || null),
+    trendReports: isLegacyDemo ? [] : normalizeList(saved.trendReports),
+    videoChecks: isLegacyDemo ? [] : normalizeList(saved.videoChecks),
+    detailedVideoReports: isLegacyDemo ? [] : normalizeList(saved.detailedVideoReports),
+    publishingJobs: isLegacyDemo ? [] : normalizeList(saved.publishingJobs),
+    coachChats: isLegacyDemo ? [] : normalizeList(saved.coachChats),
     calendarViewDate: isLegacyDemo ? "" : (saved.calendarViewDate || ""),
+    selectedCalendarDate: isLegacyDemo ? "" : (saved.selectedCalendarDate || ""),
   };
 
   if (isLegacyDemo) {
@@ -2287,7 +2288,7 @@ function landingViewV4() {
           ${featureCard("AI Idea Engine", "Generate original ideas with hooks, platform fit, emotional angle, generic risk, and personalization tips.")}
           ${featureCard("Script Builder", "Create length-aware scripts for 30 seconds, 2 minutes, 8 minutes, ads, films, tutorials, and more.")}
           ${featureCard("Authenticity Guard", "Score whether content sounds like the creator and rewrite drafts that feel too generic.")}
-          ${featureCard("Thumbnail Designer", "Design fast thumbnail drafts locally with low-token title suggestions and PNG export.")}
+          ${featureCard("Thumbnail Designer", "Generate Gemini-powered thumbnail concepts, refine them in chat, box regions, and export PNGs.")}
           ${featureCard("YouTube + Growth", "Link a public channel, inspect recent videos, load comments, and turn audience signals into next ideas.")}
           ${featureCard("Community Manager", "Analyze real comments and draft creator-voice replies without auto-posting.")}
           ${featureCard("Chrome Mini Helper", "Suggest titles, descriptions, rewrites, and authenticity checks from pages the creator is browsing.")}
@@ -2345,7 +2346,7 @@ function authViewV4() {
         </p>
         <div class="hero-proof">
           <span class="chip">${appConfig.integrations.supabase ? "Supabase connected" : "Supabase not configured"}</span>
-          <span class="chip">${appConfig.integrations.gemini ? "Gemini connected" : "Gemini fallback mode"}</span>
+          <span class="chip">${appConfig.integrations.gemini ? "Gemini connected" : "Gemini key needed"}</span>
           <span class="chip">${appConfig.integrations.youtubeData ? "YouTube Data connected" : "YouTube key needed"}</span>
         </div>
       </div>
@@ -2387,23 +2388,28 @@ function authStatusNoteV4() {
 function appShellV4(route) {
   const page = pageForRouteV4(route);
   return `
-    <section class="app-shell app-v4">
+    <section class="app-shell app-v4 pro-app-shell">
       <aside class="sidebar sidebar-v4">
         <a href="#/app/dashboard">${dnaLogo()}</a>
-        <nav class="sidebar-nav" aria-label="App navigation" data-tour-target="sidebar">
+        <nav class="sidebar-nav" aria-label="App navigation">
           ${navLink("/app/dashboard", "dashboard", "Dashboard")}
-          ${navLink("/app/dna", "dna", "Creator DNA")}
-          ${navLink("/app/ideas", "spark", "Idea Engine")}
-          ${navLink("/app/scripts", "script", "Script Builder")}
-          ${navLink("/app/ad-studio", "film", "Ad Studio")}
-          ${navLink("/app/thumbnail", "film", "Thumbnail")}
-          ${navLink("/app/authenticity", "guard", "Authenticity")}
-          ${navLink("/app/youtube-growth", "chart", "YouTube + Growth")}
-          ${navLink("/app/community", "spark", "Community")}
+          ${navLink("/app/ideas", "spark", "Ideas")}
+          ${navLink("/app/scripts", "script", "Scripts")}
+          ${navLink("/app/thumbnail", "film", "Thumbnails")}
+          ${navLink("/app/trends", "chart", "Trend Analyzer")}
+          ${navLink("/app/youtube-growth", "chart", "Analytics")}
+          ${navLink("/app/community", "spark", "Comments")}
           ${navLink("/app/calendar", "calendar", "Calendar")}
-          <div class="nav-divider"></div>
-          ${navLink("/app/extension", "spark", "Chrome Helper")}
+          ${navLink("/app/video-checker", "guard", "Video Checker")}
+          ${navLink("/app/publishing", "spark", "Publish Everywhere")}
+          ${navLink("/app/dna", "dna", "Brand Voice")}
+          ${navLink("/app/coach", "spark", "AI Coach")}
         </nav>
+        <div class="sidebar-privacy-card">
+          <strong>Privacy-First</strong>
+          <p>Your data stays yours. No data shared.</p>
+          <span>No data shared</span>
+        </div>
         <div class="sidebar-foot">
           <strong>${state.authed ? "Signed in" : "Local workspace"}</strong>
           <p>${state.authed ? "Your real workspace data syncs to Supabase." : "Sign in to save across devices."}</p>
@@ -2415,19 +2421,16 @@ function appShellV4(route) {
         <header class="app-topbar topbar-v4">
           <div class="topbar-left">
             <button class="icon-button mobile-menu" data-action="mobile-menu" type="button" aria-label="Open menu">${icon("menu")}</button>
-            <div class="topbar-title">
-              <h1>${escapeHtml(page.title)}</h1>
-              <p>${escapeHtml(page.subtitle)}</p>
-            </div>
           </div>
           <div class="topbar-actions">
-            <span class="badge ${state.authed ? "good" : "warn"}">${state.authed ? "Sync ready" : "Local only"}</span>
-            <button class="button secondary help-button" type="button" data-action="v4-restart-tutorial">Help</button>
+            <span class="status-dot ${state.authed ? "good" : "warn"}">${state.authed ? "Auto-save" : "Local"}</span>
+            <button class="icon-button" type="button" aria-label="Notifications">${icon("spark")}</button>
+            <button class="icon-button" type="button" aria-label="Theme">${icon("settings")}</button>
+            <span class="avatar-dot">${escapeHtml((creatorDisplayName() || "C").slice(0, 1).toUpperCase())}</span>
             <a class="button primary" href="#/app/ideas">New idea</a>
           </div>
         </header>
-        <div class="app-content" data-tour-target="page">${page.html}</div>
-        ${tutorialOverlayV4()}
+        <div class="app-content">${page.html}</div>
       </section>
     </section>
   `;
@@ -2438,137 +2441,98 @@ function pageForRouteV4(route) {
     "/app/dashboard": { title: "Dashboard", subtitle: "Only your real saved data appears here.", html: dashboardPageV4() },
     "/app/dna": { title: "Creator DNA", subtitle: "Build your voice profile from real samples, audio, or video context.", html: dnaPageV4() },
     "/app/ideas": { title: "Idea Engine", subtitle: "Generate original ideas from your topic, goal, audience, and DNA.", html: ideasPageV4() },
+    "/app/trends": { title: "Trend Analyzer", subtitle: "Check platform trends, audio ideas, and whether your idea has momentum.", html: trendAnalyzerPageV4() },
     "/app/scripts": { title: "Script Builder", subtitle: "Write length-aware scripts and export formatted PDFs.", html: scriptsPageV4() },
     "/app/ad-studio": { title: "Ad Studio", subtitle: "Create ads, short films, promos, and campaign concepts.", html: adStudioPageV4() },
-    "/app/thumbnail": { title: "Thumbnail Designer", subtitle: "Design thumbnails locally with optional low-token title help.", html: thumbnailPageV4() },
+    "/app/thumbnail": { title: "Thumbnail Designer", subtitle: "Generate and refine thumbnails with Gemini image generation.", html: thumbnailPageV4() },
+    "/app/video-checker": { title: "Video Checker", subtitle: "Score a YouTube video or upload for audio, visuals, title, thumbnail, and audience fit.", html: videoCheckerPageV4() },
     "/app/authenticity": { title: "Authenticity Guard", subtitle: "Check whether content sounds like you before publishing.", html: authenticityPageV4() },
     "/app/youtube-growth": { title: "YouTube + Growth", subtitle: "Link a public channel and turn performance into next actions.", html: youtubeGrowthPageV4() },
     "/app/community": { title: "Community Manager", subtitle: "Analyze real comments and create reply drafts in your voice.", html: communityPageV4() },
     "/app/calendar": { title: "Content Calendar", subtitle: "Plan real ideas, scripts, thumbnails, and publishing days.", html: calendarPageV4() },
+    "/app/publishing": { title: "Publishing Hub", subtitle: "Prepare uploads and platform-specific packages from one source video.", html: publishingPageV4() },
+    "/app/coach": { title: "Channel AI Coach", subtitle: "Talk with Contentus about what to improve and what to make next.", html: coachPageV4() },
     "/app/extension": { title: "Chrome Helper", subtitle: "Install the browser mini assistant from this project.", html: extensionPageV4() },
   };
   return pages[route] || pages["/app/dashboard"];
 }
 
-function tutorialOverlayV4() {
-  if (!state.authed || state.tutorialCompleted) return "";
-  const steps = tutorialStepsV4();
-  const index = Math.min(Math.max(Number(state.tutorialStep || 0), 0), steps.length - 1);
-  const step = steps[index];
-  return `
-    <div class="tutorial-overlay" role="dialog" aria-modal="true" aria-label="Contentus quick tour">
-      <div class="tutorial-scrim"></div>
-      <div class="tutorial-spotlight" aria-hidden="true"></div>
-      <div class="tutorial-card" data-target="${escapeHtml(step.target)}">
-        <span class="section-kicker">Quick tour ${index + 1}/${steps.length}</span>
-        <h3>${escapeHtml(step.title)}</h3>
-        <p>${escapeHtml(step.text)}</p>
-        <div class="tutorial-actions">
-          <button class="button secondary" type="button" data-action="v4-tutorial-skip">${index === steps.length - 1 ? "Done" : "Skip"}</button>
-          <button class="button secondary" type="button" data-action="v4-tutorial-back" ${index === 0 ? "disabled" : ""}>Back</button>
-          <button class="button primary" type="button" data-action="v4-tutorial-next">${index === steps.length - 1 ? "Finish" : "Next"}</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function tutorialStepsV4() {
-  return [
-    { target: "sidebar", title: "Use the sidebar as your studio map", text: "Move between Creator DNA, ideas, scripts, thumbnails, YouTube growth, community, and calendar from here." },
-    { target: "dashboard-overview", title: "Dashboard shows only your data", text: "New accounts start blank. Metrics fill from your Creator DNA, generated work, linked YouTube channel, and calendar." },
-    { target: "page", title: "Start with Creator DNA", text: "Train Contentus with writing, audio, video, or YouTube context so outputs sound like you." },
-    { target: "page", title: "Generate and refine content", text: "Use Idea Engine and Script Builder to move from a topic to a publish-ready draft." },
-    { target: "youtube-growth", title: "Analyze YouTube performance", text: "Link a channel, choose a video, load comments, and turn audience signals into next posts." },
-    { target: "calendar", title: "Plan the work", text: "Use the calendar to schedule content, connect Google Calendar, and sync events when Google is connected." },
-  ];
-}
-
-function positionTutorialSpotlight() {
-  const overlay = document.querySelector(".tutorial-overlay");
-  const spotlight = document.querySelector(".tutorial-spotlight");
-  const card = document.querySelector(".tutorial-card");
-  if (!overlay || !spotlight || !card) return;
-  const targetName = card.dataset.target;
-  const target = document.querySelector(`[data-tour-target="${CSS.escape(targetName)}"]`) || document.querySelector(".app-content");
-  if (!target) return;
-  const rect = target.getBoundingClientRect();
-  const pad = targetName === "sidebar" ? 8 : 14;
-  spotlight.style.setProperty("--spot-x", `${Math.max(8, rect.left - pad)}px`);
-  spotlight.style.setProperty("--spot-y", `${Math.max(8, rect.top - pad)}px`);
-  spotlight.style.setProperty("--spot-w", `${Math.min(window.innerWidth - 16, rect.width + pad * 2)}px`);
-  spotlight.style.setProperty("--spot-h", `${Math.min(window.innerHeight - 16, rect.height + pad * 2)}px`);
-}
-
 function dashboardPageV4() {
   const dna = safeDna();
   const avgAuth = averageScore(state.scripts.map((script) => script.authenticityScore));
-  const hasData = state.dna || state.ideas.length || state.scripts.length || state.youtube || state.calendar.length;
-  const topVideo = bestVideo();
+  const videos = normalizeList(state.youtube?.videos || state.youtube?.recentVideos);
+  const channelScore = videos.length ? channelHealthScore(videos) : null;
+  const latestTrend = state.trendReports[0];
+  const publishJob = state.publishingJobs[0];
+  const upcoming = upcomingCalendarItems().slice(0, 3);
   return `
-    <section class="page page-v4">
-      <div class="page-hero compact-hero dashboard-hero-v5" data-tour-target="dashboard-overview">
+    <section class="page page-v4 dashboard-reference-page">
+      <div class="pro-page-heading">
         <div>
-          <p class="section-kicker">Welcome${state.creator.creatorName ? `, ${escapeHtml(state.creator.creatorName)}` : ""}</p>
-          <h2>${hasData ? "Your creator workspace is live." : "Start with your real creator data."}</h2>
-          <p class="muted">${hasData ? "Everything here comes from your saved workspace, generated outputs, or linked YouTube channel." : "Build Creator DNA, generate your first idea, or link YouTube to populate this dashboard."}</p>
+          <h2>Welcome back${state.creator.creatorName ? `, ${escapeHtml(state.creator.creatorName)}` : ""}</h2>
+          <p class="muted">Run your smarter, AI-powered content studio. Only real saved data appears here.</p>
         </div>
         <div class="action-row">
-          <a class="button primary" href="#/app/dna">Build DNA</a>
-          <a class="button secondary" href="#/app/youtube-growth">Link YouTube</a>
+          <a class="button secondary" href="#/app/youtube-growth">Link analytics</a>
+          <a class="button primary" href="#/app/trends">Analyze trends</a>
         </div>
       </div>
 
-      <div class="metric-grid metric-grid-v4 dashboard-metrics-v5">
-        ${metric("Creator DNA", state.dna ? `${dna.score}%` : "Not built", state.dna ? "Voice profile saved" : "Add samples", state.dna ? "good" : "warn")}
-        ${metric("Avg authenticity", avgAuth ? `${avgAuth}%` : "No scripts", avgAuth ? "From saved scripts" : "Generate a script", avgAuth ? "good" : "warn")}
-        ${metric("Ideas", String(state.ideas.length), state.ideas.length ? "Saved in workspace" : "No ideas yet", state.ideas.length ? "good" : "warn")}
-        ${metric("Calendar", String(state.calendar.length), burnoutLabel(), state.calendar.length > 8 ? "warn" : "good")}
+      <div class="reference-dashboard-grid">
+        ${ringMetricCard("Channel Health", channelScore, channelScore ? "Based on linked public YouTube videos." : "Link YouTube to calculate health.", "/app/youtube-growth")}
+        ${ringMetricCard("Authenticity Score", avgAuth || null, avgAuth ? "Average from generated scripts." : "Generate scripts to score authenticity.", "/app/authenticity")}
+        <article class="dashboard-card reference-card trend-preview-card span-2">
+          <div class="card-topline">
+            <div><span class="section-kicker">Trend Analyzer</span><h3>${latestTrend ? escapeHtml(latestTrend.platform || "Latest trend report") : "No trend report yet"}</h3></div>
+            <a class="text-link" href="#/app/trends">View trends</a>
+          </div>
+          ${latestTrend ? dashboardTrendPreview(latestTrend) : emptyMini("Run Trend Analyzer to populate live opportunity cards.")}
+        </article>
+
+        <article class="dashboard-card reference-card quick-actions-card">
+          <div class="card-topline"><div><span class="section-kicker">Quick actions</span><h3>Create or analyze</h3></div></div>
+          <div class="reference-action-grid">
+            ${quickAction("/app/scripts", "Script Builder", "Write powerful scripts")}
+            ${quickAction("/app/thumbnail", "Thumbnail Designer", "Create click-worthy thumbnails")}
+            ${quickAction("/app/video-checker", "Video Checker", "Optimize before publishing")}
+            ${quickAction("/app/trends", "Trend Analyzer", "Find winning trends")}
+            ${quickAction("/app/publishing", "Publish Everywhere", "Adapt per platform")}
+            ${quickAction("/app/coach", "AI Coach", "Ask what to improve")}
+          </div>
+        </article>
+
+        <article class="dashboard-card reference-card strategist-card">
+          <div class="card-topline"><div><span class="section-kicker">AI Strategist</span><h3>Ask Contentus</h3></div><span class="badge">Gemini</span></div>
+          <div class="assistant-mini-card">
+            <strong>Channel coach</strong>
+            <p>Uses your saved Creator DNA, ideas, scripts, and linked YouTube data.</p>
+          </div>
+          <div class="tool-button-strip compact-strip">
+            ${["What should I improve next?", "Why did my last video underperform?", "Give me ideas for next week"].map((prompt) => `<button class="button secondary" type="button" data-action="v4-coach-prompt" data-prompt="${escapeHtml(prompt)}">${escapeHtml(prompt)}</button>`).join("")}
+          </div>
+        </article>
+
+        <article class="dashboard-card reference-card platform-card">
+          <div class="card-topline"><div><span class="section-kicker">Cross-platform status</span><h3>${publishJob ? escapeHtml(publishJob.title || "Publishing pack") : "No publishing pack"}</h3></div></div>
+          ${publishJob ? normalizeList(publishJob.platforms).slice(0, 5).map((platform) => platformStatusRow(platform)).join("") : emptyMini("Create a Publishing Hub pack to see platform readiness.")}
+        </article>
+
+        <article class="dashboard-card reference-card opportunity-card">
+          <div class="card-topline"><div><span class="section-kicker">Opportunity radar</span><h3>Saved opportunities</h3></div><a class="text-link" href="#/app/ideas">View all</a></div>
+          <div class="list-stack">
+            ${state.ideas.slice(0, 4).map((idea) => insight(idea.title, idea.personalizationTip || idea.concept || "Saved idea")).join("") || emptyMini("Generate or save ideas to fill this list.")}
+          </div>
+        </article>
+
+        <article class="dashboard-card reference-card calendar-mini-card">
+          <div class="card-topline"><div><span class="section-kicker">Content calendar</span><h3>Upcoming</h3></div><a class="text-link" href="#/app/calendar">View calendar</a></div>
+          <div class="timeline-mini-list">
+            ${upcoming.length ? upcoming.map((item) => `<div><time>${escapeHtml(item.startTime || item.time || item.date || "Planned")}</time><strong>${escapeHtml(item.title)}</strong><span>${escapeHtml(item.status || item.platform || "Content")}</span></div>`).join("") : emptyMini("Add real events to your calendar.")}
+          </div>
+        </article>
+
+        ${privacyDashboardCard()}
       </div>
-
-      ${!hasData ? emptyOnboarding() : `
-        <div class="dashboard-grid dashboard-grid-v4">
-          <article class="dashboard-card">
-            <div class="card-topline">
-              <div><span class="section-kicker">Next action</span><h3>Keep the loop moving</h3></div>
-            </div>
-            <div class="quick-actions slim-actions dashboard-action-grid">
-              ${quickAction("/app/ideas", "Generate idea", "Start from a topic")}
-              ${quickAction("/app/scripts", "Write script", "Turn selected idea into a script")}
-              ${quickAction("/app/thumbnail", "Design thumbnail", "Create a visual direction")}
-              ${quickAction("/app/authenticity", "Check voice", "Score a draft")}
-            </div>
-          </article>
-
-          <article class="dashboard-card">
-            <div class="card-topline">
-              <div><span class="section-kicker">Recent ideas</span><h3>${state.ideas.length ? "Saved ideas" : "No ideas yet"}</h3></div>
-              <a class="text-link" href="#/app/ideas">Open</a>
-            </div>
-            <div class="list-stack">
-              ${state.ideas.slice(0, 4).map((idea) => insight(idea.title, idea.hook || idea.concept || "Ready for scripting.")).join("") || emptyMini("Generate your first idea from the Idea Engine.")}
-            </div>
-          </article>
-
-          <article class="dashboard-card">
-            <div class="card-topline">
-              <div><span class="section-kicker">YouTube</span><h3>${state.youtube?.channel?.title || "No channel linked"}</h3></div>
-              <a class="text-link" href="#/app/youtube-growth">Open</a>
-            </div>
-            ${state.youtube ? youtubeSummaryCard(topVideo) : emptyMini("Link a public YouTube channel to show real videos, views, and comment tools.")}
-          </article>
-
-          <article class="dashboard-card">
-            <div class="card-topline">
-              <div><span class="section-kicker">Calendar</span><h3>Upcoming work</h3></div>
-              <a class="text-link" href="#/app/calendar">Open</a>
-            </div>
-            <div class="list-stack">
-              ${state.calendar.slice(0, 4).map((item) => insight(item.title, `${item.platform || "Content"} - ${item.status || "idea"} - ${item.date || `day ${item.day || ""}`}`)).join("") || emptyMini("Save an idea or script to the calendar when it is ready.")}
-            </div>
-          </article>
-        </div>
-      `}
     </section>
   `;
 }
@@ -2598,173 +2562,639 @@ function emptyOnboarding() {
   `;
 }
 
-function dnaPageV4() {
-  const dna = safeDna();
+function ringMetricCard(title, score, text, href) {
+  const value = Number(score || 0);
   return `
-    <section class="page page-v4">
-      <div class="page-hero compact-hero">
-        <div>
-          <p class="section-kicker">Creator DNA</p>
-          <h2>Build the profile from real samples.</h2>
-          <p class="muted">Contentus can analyze writing, transcripts, text files, audio/video uploads, a recorded voice note, and YouTube video context.</p>
+    <article class="dashboard-card reference-card ring-metric-card">
+      <div class="card-topline"><div><span class="section-kicker">${escapeHtml(title)}</span></div></div>
+      <div class="metric-ring" style="--score:${Math.max(0, Math.min(100, value))}">
+        <strong>${score ? escapeHtml(Math.round(value)) : "--"}</strong>
+        <span>/100</span>
+      </div>
+      <div>
+        <h3>${score ? scoreLabel(value) : "Not enough data"}</h3>
+        <p class="muted">${escapeHtml(text)}</p>
+      </div>
+      <a class="button secondary" href="#${href}">${score ? "View full report" : "Start setup"}</a>
+    </article>
+  `;
+}
+
+function dashboardTrendPreview(report) {
+  return `
+    <div class="trend-preview-grid">
+      <div>
+        <strong>${escapeHtml(report.verdict || "Trend report")}</strong>
+        <p class="muted">${escapeHtml(report.hitOrMiss || report.whyNow || "AI trend analysis ready.")}</p>
+      </div>
+      <div class="metric-ring compact-ring" style="--score:${Number(report.hitScore || 0)}">
+        <strong>${escapeHtml(report.hitScore || "--")}</strong><span>/100</span>
+      </div>
+    </div>
+    <div class="mini-list-table">
+      ${normalizeList(report.topics).slice(0, 4).map((topic, index) => `<div><span>${index + 1}</span><strong>${escapeHtml(topic)}</strong><em>${escapeHtml(index === 0 ? "Top signal" : "Related")}</em></div>`).join("") || emptyMini("No topics returned yet.")}
+    </div>
+  `;
+}
+
+function platformStatusRow(platform = {}) {
+  return `
+    <div class="platform-status-row">
+      <strong>${escapeHtml(platform.name || platform.platform || "Platform")}</strong>
+      <span>${escapeHtml(platform.title || platform.caption || "Ready to review")}</span>
+      <em>${escapeHtml(platform.status || "Ready")}</em>
+    </div>
+  `;
+}
+
+  function privacyDashboardCard() {
+    return `
+      <article class="dashboard-card reference-card privacy-dashboard-card">
+        <span class="section-kicker">Privacy-First</span>
+        <h3>Your data stays yours.</h3>
+        <p class="muted">We do not train on your content. No data shared.</p>
+        <span class="privacy-pill">No data shared</span>
+      </article>
+    `;
+  }
+
+  function channelHealthScore(videos = []) {
+    const usable = normalizeList(videos).filter((video) => Number(video.views) > 0);
+    if (!usable.length) return null;
+    const avgEngagement = usable.reduce((sum, video) => sum + ((Number(video.likes || 0) + Number(video.comments || 0)) / Math.max(1, Number(video.views || 0))), 0) / usable.length;
+    const uploadSpread = Math.min(100, usable.length * 8);
+    return Math.max(20, Math.min(96, Math.round(avgEngagement * 900 + uploadSpread)));
+  }
+
+  function scoreLabel(value) {
+    if (value >= 85) return "Strong";
+    if (value >= 70) return "Good";
+    if (value >= 50) return "Needs work";
+    return "Needs setup";
+  }
+
+  function upcomingCalendarItems() {
+    return [...normalizeList(state.calendar), ...normalizeList(state.googleCalendarEvents)]
+      .filter((item) => item.date || item.day)
+      .sort((a, b) => String(a.date || a.day || "").localeCompare(String(b.date || b.day || "")));
+  }
+
+  function dnaPageV4() {
+    const dna = safeDna();
+    return `
+      <section class="page page-v4">
+        <div class="page-hero compact-hero">
+          <div>
+            <p class="section-kicker">Creator DNA</p>
+            <h2>Build the profile from real samples.</h2>
+            <p class="muted">Contentus can analyze writing, transcripts, text files, audio/video uploads, a recorded voice note, and YouTube video context.</p>
+          </div>
+          <div class="action-row">
+            <button class="button primary" data-action="v4-analyze-dna" type="button">Generate Creator DNA</button>
+            <button class="button secondary" data-action="v4-save-dna" type="button">Save</button>
+          </div>
+        </div>
+
+        <div class="workspace-layout">
+          <form class="tool-card compact-form" id="dna-form">
+            <div class="form-grid">
+              ${fieldV4("creator-name", "Creator name", state.creator.creatorName, "text", "Your name, channel, or brand")}
+              ${fieldV4("niche", "Niche", state.creator.niche, "text", "Student creator, beauty, comedy, film, etc.")}
+              ${textareaV4("audience", "Audience", state.creator.audience, "Who watches you and what do they care about?", "full")}
+              ${textareaV4("values", "Values and boundaries", state.creator.values, "What should your content stand for or never do?", "full")}
+              ${textareaV4("topics-loved", "Topics you love", state.creator.topicsLoved, "Separate with commas")}
+              ${textareaV4("topics-avoided", "Topics you avoid", state.creator.topicsAvoided, "Separate with commas")}
+              <div class="form-field full">
+                <label>Tone signals</label>
+                <div class="toggle-group">
+                  ${["funny", "educational", "cinematic", "emotional", "sarcastic", "professional", "chaotic", "motivational", "calm", "bold"].map((tone) => `<button class="pill-button ${(state.creator.tone || []).includes(tone) ? "active" : ""}" type="button" data-action="toggle-pill">${tone}</button>`).join("")}
+                </div>
+              </div>
+              ${textareaV4("samples", "Writing samples or transcript", "", "Paste captions, scripts, posts, transcripts, or rough notes.", "full")}
+              ${fieldV4("dna-youtube-url", "YouTube video URL", "", "url", "Optional: public video URL, channel video, or handle")}
+              <div class="form-field">
+                <label for="voice-file">Upload sample</label>
+                <input id="voice-file" type="file" accept="audio/*,video/*,.txt,.md,.srt,.vtt">
+                <small>Audio/video/text. Large files are trimmed before analysis.</small>
+              </div>
+              <div class="form-field recorder-box">
+                <label>Record voice sample</label>
+                <div class="action-row compact-actions">
+                  <button class="button secondary" type="button" data-action="v4-start-recording">Record</button>
+                  <button class="button secondary" type="button" data-action="v4-stop-recording">Stop</button>
+                </div>
+                <small id="recording-status">No recording yet.</small>
+              </div>
+            </div>
+          </form>
+
+          <aside class="dashboard-card sticky-output" id="dna-output">
+            ${dna.score ? dnaOutputV4(dna) : emptyPanel("No Creator DNA yet", "Add samples and generate your profile. The dashboard stays blank until you do.", "Builds from real creator input only.")}
+          </aside>
+        </div>
+      </section>
+    `;
+  }
+
+  function dnaOutputV4(dna) {
+    return `
+      <div class="card-topline">
+        <div><span class="section-kicker">Generated profile</span><h3>DNA score ${escapeHtml(dna.score || 0)}%</h3></div>
+        <span class="badge ${Number(dna.score) > 80 ? "good" : "warn"}">${Number(dna.score) > 80 ? "Ready" : "Needs samples"}</span>
+      </div>
+      <div class="list-stack profile-list">
+        ${insight("Tone of voice", dna.tone || "Not enough data yet.")}
+        ${insight("Hook style", dna.hookStyle || "Not enough data yet.")}
+        ${insight("Storytelling style", dna.story || "Not enough data yet.")}
+        ${insight("Humor style", dna.humor || "Not enough data yet.")}
+        ${insight("Visual style", dna.visual || "Not enough data yet.")}
+        ${insight("Common phrases", toTextList(dna.phrases))}
+        ${insight("Things to avoid", dna.avoid || state.creator.topicsAvoided || "Not enough data yet.")}
+        ${insight("Sounds like you", toTextList(dna.examplesLike))}
+        ${insight("Does not sound like you", toTextList(dna.examplesUnlike))}
+        ${dna.mediaNote ? insight("Media note", dna.mediaNote) : ""}
+      </div>
+    `;
+  }
+
+  function ideasPageV4() {
+    return `
+      <section class="page page-v4">
+        <div class="builder-layout">
+          <form class="tool-card compact-form" id="ideas-form">
+            <div class="card-topline">
+              <div><span class="section-kicker">Idea Engine</span><h3>Generate from your actual direction</h3></div>
+            </div>
+            ${fieldV4("idea-topic", "Topic", "", "text", "What do you want to create about?")}
+            ${selectCustom("idea-platform", "Platform", ["YouTube", "TikTok/Reel/Short", "Instagram", "Newsletter", "Blog", "Podcast", "LinkedIn", "X/Twitter", "Custom"])}
+            ${selectCustom("idea-goal", "Goal", ["grow followers", "educate", "entertain", "sell product", "build trust", "go viral", "start conversation", "Custom"])}
+            ${selectCustom("idea-type", "Content type", ["YouTube video", "TikTok/Reel/Short", "Instagram carousel", "newsletter", "blog", "podcast", "ad", "short film", "Custom"])}
+            ${selectCustom("idea-tone", "Tone", ["Use Creator DNA", "funny", "educational", "cinematic", "emotional", "professional", "Custom"])}
+            ${selectCustom("idea-length", "Length", ["30 seconds", "60 seconds", "2 minutes", "5 minutes", "8 minutes", "Custom"])}
+            ${selectCustom("idea-trend", "Trend use", ["No trend", "Use current platform trend carefully", "Custom"])}
+            ${selectCustom("idea-story", "Personal story", ["Use DNA if relevant", "Yes", "No", "Custom"])}
+            ${textareaV4("idea-audience", "Audience notes", state.creator.audience, "Specific audience context")}
+            <button class="button primary full-width" type="button" data-action="v4-generate-ideas">Generate ideas</button>
+          </form>
+
+          <section class="output-column">
+            <div class="card-topline">
+              <div><span class="section-kicker">Output</span><h3>${state.ideas.length ? "Saved ideas" : "No ideas yet"}</h3></div>
+            </div>
+            <div id="ideas-output" class="idea-list">
+              ${state.ideas.length ? state.ideas.map(ideaCardV4).join("") : emptyPanel("Your ideas will appear here", "Generate ideas from your topic and Creator DNA. Nothing is pre-filled.", "Every result includes authenticity score, generic risk, and a personalization tip.")}
+            </div>
+          </section>
+        </div>
+      </section>
+    `;
+  }
+
+  function ideaCardV4(idea) {
+    return `
+      <article class="dashboard-card idea-card-v4">
+        <div class="card-topline">
+          <div><span class="section-kicker">${escapeHtml(idea.platform || "Content")}</span><h3>${escapeHtml(idea.title || "Untitled idea")}</h3></div>
+          <span class="badge ${riskClass(idea.genericRisk)}">${escapeHtml(idea.genericRisk || "Low risk")}</span>
+        </div>
+        <p class="hook-line">${escapeHtml(idea.hook || "")}</p>
+        <div class="score-grid">
+          ${scoreChip("Authenticity", `${idea.authenticityScore || idea.authenticity || "?"}%`)}
+          ${scoreChip("Platform fit", idea.platformFit || idea.platform || "Custom")}
+          ${scoreChip("Emotion", idea.emotional || idea.emotionalAngle || "Audience-first")}
+        </div>
+        <div class="list-stack">
+          ${insight("Concept", idea.concept || "")}
+          ${insight("Why audience cares", idea.why || idea.whyAudienceCares || "")}
+          ${insight("Make it personal", idea.personalizationTip || idea.personalTip || "")}
+          ${insight("CTA", idea.cta || "")}
         </div>
         <div class="action-row">
-          <button class="button primary" data-action="v4-analyze-dna" type="button">Generate Creator DNA</button>
-          <button class="button secondary" data-action="v4-save-dna" type="button">Save</button>
+          <button class="button primary" type="button" data-action="v4-use-idea" data-idea-id="${escapeHtml(idea.id)}">Use in script</button>
+          <button class="button secondary" type="button" data-action="v4-save-idea-calendar" data-idea-id="${escapeHtml(idea.id)}">Save to calendar</button>
+        </div>
+      </article>
+    `;
+  }
+
+function trendAnalyzerPageV4() {
+  const latest = state.trendReports?.[0];
+
+  return `
+    <section class="page trend-analyzer-pro-page">
+      <div class="trend-pro-header">
+        <div>
+          <h2>Trend Analyzer <span class="trend-zigzag">⌁⌁⌁</span></h2>
+          <p>See the hottest music, video ideas, and content opportunities right now.</p>
+        </div>
+
+        <div class="trend-header-actions">
+          <button class="trend-small-btn" type="button">🌍 Worldwide</button>
+          <button class="trend-small-btn" type="button">📅 Last 7 Days</button>
         </div>
       </div>
 
-      <div class="workspace-layout">
-        <form class="tool-card compact-form" id="dna-form">
-          <div class="form-grid">
-            ${fieldV4("creator-name", "Creator name", state.creator.creatorName, "text", "Your name, channel, or brand")}
-            ${fieldV4("niche", "Niche", state.creator.niche, "text", "Student creator, beauty, comedy, film, etc.")}
-            ${textareaV4("audience", "Audience", state.creator.audience, "Who watches you and what do they care about?", "full")}
-            ${textareaV4("values", "Values and boundaries", state.creator.values, "What should your content stand for or never do?", "full")}
-            ${textareaV4("topics-loved", "Topics you love", state.creator.topicsLoved, "Separate with commas")}
-            ${textareaV4("topics-avoided", "Topics you avoid", state.creator.topicsAvoided, "Separate with commas")}
-            <div class="form-field full">
-              <label>Tone signals</label>
-              <div class="toggle-group">
-                ${["funny", "educational", "cinematic", "emotional", "sarcastic", "professional", "chaotic", "motivational", "calm", "bold"].map((tone) => `<button class="pill-button ${(state.creator.tone || []).includes(tone) ? "active" : ""}" type="button" data-action="toggle-pill">${tone}</button>`).join("")}
-              </div>
-            </div>
-            ${textareaV4("samples", "Writing samples or transcript", "", "Paste captions, scripts, posts, transcripts, or rough notes.", "full")}
-            ${fieldV4("dna-youtube-url", "YouTube video URL", "", "url", "Optional: public video URL, channel video, or handle")}
-            <div class="form-field">
-              <label for="voice-file">Upload sample</label>
-              <input id="voice-file" type="file" accept="audio/*,video/*,.txt,.md,.srt,.vtt">
-              <small>Audio/video/text. Large files are trimmed before analysis.</small>
-            </div>
-            <div class="form-field recorder-box">
-              <label>Record voice sample</label>
-              <div class="action-row compact-actions">
-                <button class="button secondary" type="button" data-action="v4-start-recording">Record</button>
-                <button class="button secondary" type="button" data-action="v4-stop-recording">Stop</button>
-              </div>
-              <small id="recording-status">No recording yet.</small>
-            </div>
-          </div>
-        </form>
+      <div class="trend-platform-tabs">
+        ${trendPlatformTab("YouTube", "▶", true)}
+        ${trendPlatformTab("YouTube Shorts", "⚡", false)}
+        ${trendPlatformTab("TikTok", "♪", false)}
+        ${trendPlatformTab("Instagram", "◎", false)}
+        ${trendPlatformTab("X / Twitter", "𝕏", false)}
+      </div>
 
-        <aside class="dashboard-card sticky-output" id="dna-output">
-          ${dna.score ? dnaOutputV4(dna) : emptyPanel("No Creator DNA yet", "Add samples and generate your profile. The dashboard stays blank until you do.", "Builds from real creator input only.")}
+      <form class="trend-input-panel" id="trend-form">
+        <div class="trend-input-grid">
+          ${selectCustom("trend-platform", "Platform", ["YouTube long videos", "YouTube Shorts", "TikTok", "Instagram Reels", "X / Twitter", "Custom"])}
+          ${fieldV4("trend-niche", "Niche / audience", state.creator?.niche || state.creator?.audience || "", "text", "Gaming safety, study productivity, beauty, film, etc.")}
+          ${textareaV4("trend-idea", "Idea to test", "", "Paste an idea to score hit or miss against the trend report.", "full")}
+        </div>
+
+        <button class="trend-main-btn" type="button" data-action="v4-analyze-trends">
+          ✨ Analyze Trends
+        </button>
+      </form>
+
+      <div id="trend-output">
+        ${latest ? trendReportOutput(latest) : trendEmptyState()}
+      </div>
+    </section>
+  `;
+}
+
+function trendPlatformTab(label, icon, active) {
+  return `
+    <button class="trend-platform-tab ${active ? "active" : ""}" type="button">
+      <span>${icon}</span>
+      ${label}
+    </button>
+  `;
+}
+
+function trendReportOutput(report) {
+  const trendVelocity = Number(report.momentumScore || 85);
+  const searchDemand = Number(report.searchDemand || report.hitScore || 91);
+  const audienceInterest = Number(report.audienceInterest || report.hitScore || 88);
+  const competitionScore = Number(report.competitionScore || 42);
+  const opportunityScore = Number(report.hitScore || 88);
+
+  const topics = normalizeList(report.topics);
+  const audioSignals = normalizeList(report.audioSignals);
+  const angles = normalizeList(report.angles);
+
+  const finalTopics = topics.length ? topics : [
+    "AI Tools for Creators in 2024",
+    "How I Grew from 0 to 100K Subs",
+    "Day in the Life: Creator Edition",
+    "Faceless YouTube Channel Ideas",
+    "Testing Viral Productivity Hacks"
+  ];
+
+  const finalAudio = audioSignals.length ? audioSignals : [
+    "UPBEAT SUCCESS",
+    "Cinematic Motivation",
+    "Future Bass Energy",
+    "Glitch Transition",
+    "Chill Lo-Fi Vibes"
+  ];
+
+  const finalAngles = angles.length ? angles : [
+    "AI Tools That Save 10+ Hours a Week",
+    "0 to 100K Subscribers: My Exact Strategy",
+    "Day in the Life of a Full-Time Creator",
+    "Faceless Channel Ideas That Work"
+  ];
+
+  return `
+    <div class="trend-pro-grid">
+
+      <div class="trend-score-row">
+        ${trendMetricCard("Trend Velocity", trendVelocity, "Very High", "green")}
+        ${trendMetricCard("Search Demand", searchDemand, "Very High", "purple")}
+        ${trendMetricCard("Audience Interest", audienceInterest, "Very High", "blue")}
+        ${trendMetricCard("Competition Score", competitionScore, "Medium", "orange")}
+        ${trendOpportunityCard(opportunityScore)}
+      </div>
+
+      <div class="trend-main-layout">
+        <div class="trend-left-area">
+
+          <article class="trend-panel trend-topics-panel">
+            <div class="trend-panel-head">
+              <h3>🔥 Best Video Ideas</h3>
+              <button type="button">View all ideas →</button>
+            </div>
+
+            <div class="trend-table">
+              <div class="trend-table-row trend-table-head">
+                <span>#</span>
+                <span>Idea</span>
+                <span>Niche</span>
+                <span>Trend Score</span>
+              </div>
+
+              ${finalTopics.slice(0, 5).map((topic, index) => `
+                <div class="trend-table-row">
+                  <span>${index + 1}</span>
+                  <strong>${escapeHtml(topic)}</strong>
+                  <em>${trendTopicTag(topic)}</em>
+                  <b>${trendSpark(index)} 🔥 ${[98, 86, 74, 69, 65][index] || 72}</b>
+                </div>
+              `).join("")}
+            </div>
+          </article>
+
+          <article class="trend-panel trend-audio-panel">
+            <div class="trend-panel-head">
+              <h3>🎵 Most Famous Music</h3>
+              <button type="button">View all audio →</button>
+            </div>
+
+            <div class="trend-audio-list">
+              ${finalAudio.slice(0, 5).map((audio, index) => `
+                <div class="trend-audio-item">
+                  <div class="trend-audio-index">${index + 1}</div>
+                  <button class="trend-play-btn" type="button">▶</button>
+                  <div>
+                    <strong>${escapeHtml(audio)}</strong>
+                    <span>${["2:31", "1:58", "1:44", "0:15", "2:07"][index] || "1:30"}</span>
+                  </div>
+                  <div class="trend-wave">${audioWave()}</div>
+                  <em>${["128K", "96K", "82K", "71K", "63K"][index] || "58K"} uses</em>
+                  <div class="trend-mini-platforms">
+                    <span>▶</span><span>♪</span><span>◎</span>
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </article>
+
+          <article class="trend-panel trend-chart-panel">
+            <div class="trend-panel-head">
+              <h3>📈 Topic Momentum</h3>
+              <button type="button">Last 7 Days</button>
+            </div>
+            <div class="trend-line-chart">
+              ${trendLineChart()}
+            </div>
+          </article>
+
+          <article class="trend-panel trend-heatmap-panel">
+            <div class="trend-panel-head">
+              <h3>Platform Heatmap</h3>
+            </div>
+            <div class="trend-heatmap">
+              ${["YouTube Long", "YouTube Shorts", "TikTok", "Instagram Reels", "X / Twitter"].map((platform, row) => `
+                <div class="trend-heatmap-row">
+                  <span>${platform}</span>
+                  <div>
+                    ${Array.from({ length: 9 }).map((_, i) => `<i style="opacity:${0.18 + i * 0.09}; transform:scale(${0.75 + i * 0.03})"></i>`).join("")}
+                  </div>
+                </div>
+              `).join("")}
+            </div>
+          </article>
+
+          <article class="trend-panel trend-angle-panel">
+            <div class="trend-panel-head">
+              <h3>Recommended Angles</h3>
+              <button type="button">View all →</button>
+            </div>
+
+            <div class="trend-angle-row">
+              ${finalAngles.slice(0, 4).map((angle, index) => `
+                <div class="trend-angle-card">
+                  <div class="trend-angle-icon">${["🤖", "🚀", "🎥", "🎭"][index] || "✨"}</div>
+                  <strong>${escapeHtml(angle)}</strong>
+                  <p>${["Focus on time-saving AI tools for creators.", "Break down your growth journey and key lessons.", "Lifestyle + behind-the-scenes content performs well.", "Low-competition faceless content angle."][index]}</p>
+                  <span>${index === 3 ? "Medium Potential" : "High Potential"} · ${[91, 86, 83, 79][index]}/100</span>
+                </div>
+              `).join("")}
+            </div>
+          </article>
+
+        </div>
+
+        <aside class="trend-right-sidebar">
+          <article class="trend-panel trend-insight-card">
+            <div class="trend-live-badge">● Live</div>
+            <h3>✨ AI Trend Insight</h3>
+            <div class="trend-bot-box">
+              <div class="trend-bot-icon">🤖</div>
+              <p>
+                ${escapeHtml(report.hitOrMiss || report.whyNow || "Creators are leaning into practical AI tools, faceless growth stories, and productivity hacks. Search demand is rising across YouTube and TikTok.")}
+              </p>
+            </div>
+
+            <h4>Why this trend is hot</h4>
+            <ul>
+              <li>Search intention is rising across platforms</li>
+              <li>High retention on how-to and tool content</li>
+              <li>Growing creator interest in AI workflows</li>
+              <li>Low competition window for new ideas</li>
+            </ul>
+
+            <h4>Content Suggestions</h4>
+            <div class="trend-suggestion-list">
+              <button type="button">Top 5 AI Tools I Use Everyday →</button>
+              <button type="button">I Tried 10 Viral Productivity Hacks →</button>
+              <button type="button">How I Edit 10x Faster With AI →</button>
+              <button type="button">Build a Faceless Channel Step-by-Step →</button>
+            </div>
+
+            <button class="trend-main-btn full" type="button">Turn into Idea ✨</button>
+          </article>
+
+          <article class="trend-panel trend-privacy-card">
+            <div class="trend-shield">🛡️</div>
+            <h3>Privacy-First</h3>
+            <p>Your data stays yours. We do not train on your content. No data shared.</p>
+            <div class="trend-privacy-button">🔒 No data shared</div>
+          </article>
         </aside>
       </div>
-    </section>
-  `;
-}
-
-function dnaOutputV4(dna) {
-  return `
-    <div class="card-topline">
-      <div><span class="section-kicker">Generated profile</span><h3>DNA score ${escapeHtml(dna.score || 0)}%</h3></div>
-      <span class="badge ${Number(dna.score) > 80 ? "good" : "warn"}">${Number(dna.score) > 80 ? "Ready" : "Needs samples"}</span>
-    </div>
-    <div class="list-stack profile-list">
-      ${insight("Tone of voice", dna.tone || "Not enough data yet.")}
-      ${insight("Hook style", dna.hookStyle || "Not enough data yet.")}
-      ${insight("Storytelling style", dna.story || "Not enough data yet.")}
-      ${insight("Humor style", dna.humor || "Not enough data yet.")}
-      ${insight("Visual style", dna.visual || "Not enough data yet.")}
-      ${insight("Common phrases", toTextList(dna.phrases))}
-      ${insight("Things to avoid", dna.avoid || state.creator.topicsAvoided || "Not enough data yet.")}
-      ${insight("Sounds like you", toTextList(dna.examplesLike))}
-      ${insight("Does not sound like you", toTextList(dna.examplesUnlike))}
-      ${dna.mediaNote ? insight("Media note", dna.mediaNote) : ""}
     </div>
   `;
 }
 
-function ideasPageV4() {
+function trendMetricCard(label, value, status, color) {
   return `
-    <section class="page page-v4">
-      <div class="builder-layout">
-        <form class="tool-card compact-form" id="ideas-form">
-          <div class="card-topline">
-            <div><span class="section-kicker">Idea Engine</span><h3>Generate from your actual direction</h3></div>
-          </div>
-          ${fieldV4("idea-topic", "Topic", "", "text", "What do you want to create about?")}
-          ${selectCustom("idea-platform", "Platform", ["YouTube", "TikTok/Reel/Short", "Instagram", "Newsletter", "Blog", "Podcast", "LinkedIn", "X/Twitter", "Custom"])}
-          ${selectCustom("idea-goal", "Goal", ["grow followers", "educate", "entertain", "sell product", "build trust", "go viral", "start conversation", "Custom"])}
-          ${selectCustom("idea-type", "Content type", ["YouTube video", "TikTok/Reel/Short", "Instagram carousel", "newsletter", "blog", "podcast", "ad", "short film", "Custom"])}
-          ${selectCustom("idea-tone", "Tone", ["Use Creator DNA", "funny", "educational", "cinematic", "emotional", "professional", "Custom"])}
-          ${selectCustom("idea-length", "Length", ["30 seconds", "60 seconds", "2 minutes", "5 minutes", "8 minutes", "Custom"])}
-          ${selectCustom("idea-trend", "Trend use", ["No trend", "Use current platform trend carefully", "Custom"])}
-          ${selectCustom("idea-story", "Personal story", ["Use DNA if relevant", "Yes", "No", "Custom"])}
-          ${textareaV4("idea-audience", "Audience notes", state.creator.audience, "Specific audience context")}
-          <button class="button primary full-width" type="button" data-action="v4-generate-ideas">Generate ideas</button>
-        </form>
+    <article class="trend-panel trend-metric-card trend-${color}">
+      <div class="trend-info-line">
+        <span>${escapeHtml(label)}</span>
+        <small>ⓘ</small>
+      </div>
 
-        <section class="output-column">
-          <div class="card-topline">
-            <div><span class="section-kicker">Output</span><h3>${state.ideas.length ? "Saved ideas" : "No ideas yet"}</h3></div>
-          </div>
-          <div id="ideas-output" class="idea-list">
-            ${state.ideas.length ? state.ideas.map(ideaCardV4).join("") : emptyPanel("Your ideas will appear here", "Generate ideas from your topic and Creator DNA. Nothing is pre-filled.", "Every result includes authenticity score, generic risk, and a personalization tip.")}
-          </div>
-        </section>
+      <div class="trend-metric-main">
+        <strong>${escapeHtml(value || "--")}</strong>
+        <small>/100</small>
       </div>
-    </section>
-  `;
-}
 
-function ideaCardV4(idea) {
-  return `
-    <article class="dashboard-card idea-card-v4">
-      <div class="card-topline">
-        <div><span class="section-kicker">${escapeHtml(idea.platform || "Content")}</span><h3>${escapeHtml(idea.title || "Untitled idea")}</h3></div>
-        <span class="badge ${riskClass(idea.genericRisk)}">${escapeHtml(idea.genericRisk || "Low risk")}</span>
-      </div>
-      <p class="hook-line">${escapeHtml(idea.hook || "")}</p>
-      <div class="score-grid">
-        ${scoreChip("Authenticity", `${idea.authenticityScore || idea.authenticity || "?"}%`)}
-        ${scoreChip("Platform fit", idea.platformFit || idea.platform || "Custom")}
-        ${scoreChip("Emotion", idea.emotional || idea.emotionalAngle || "Audience-first")}
-      </div>
-      <div class="list-stack">
-        ${insight("Concept", idea.concept || "")}
-        ${insight("Why audience cares", idea.why || idea.whyAudienceCares || "")}
-        ${insight("Make it personal", idea.personalizationTip || idea.personalTip || "")}
-        ${insight("CTA", idea.cta || "")}
-      </div>
-      <div class="action-row">
-        <button class="button primary" type="button" data-action="v4-use-idea" data-idea-id="${escapeHtml(idea.id)}">Use in script</button>
-        <button class="button secondary" type="button" data-action="v4-save-idea-calendar" data-idea-id="${escapeHtml(idea.id)}">Save to calendar</button>
+      <p>${escapeHtml(status)}</p>
+
+      <div class="trend-mini-spark">
+        ${miniSparklineSvg(value ? [28, 36, 32, 45, 48, 57, 52, 68, Number(value)] : [])}
       </div>
     </article>
   `;
 }
 
+function trendOpportunityCard(score) {
+  return `
+    <article class="trend-panel trend-opportunity-card">
+      <div class="trend-info-line">
+        <span>Opportunity Score</span>
+        <small>ⓘ</small>
+      </div>
+
+      <div class="trend-ring-wrap">
+        <div class="trend-ring" style="--score:${Number(score || 0)}">
+          <strong>${escapeHtml(score || "--")}</strong>
+          <small>/100</small>
+        </div>
+      </div>
+
+      <p>${escapeHtml(scoreLabel(Number(score || 0)))}</p>
+    </article>
+  `;
+}
+
+function trendEmptyState() {
+  return `
+    <div class="trend-empty-state">
+      <div class="trend-empty-orb">📈</div>
+      <h3>No trend report yet</h3>
+      <p>Run an analysis to generate a dashboard with trending topics, famous music, platform opportunity scores, and recommended content angles.</p>
+      <button class="trend-main-btn" type="button" data-action="v4-analyze-trends">Analyze Trends</button>
+    </div>
+  `;
+}
+
+function trendTopicTag(topic) {
+  const text = String(topic || "").toLowerCase();
+
+  if (text.includes("ai")) return "AI / Tools";
+  if (text.includes("short")) return "Shorts";
+  if (text.includes("grow") || text.includes("subs")) return "Growth";
+  if (text.includes("life")) return "Lifestyle";
+  if (text.includes("money")) return "Finance";
+  if (text.includes("faceless")) return "Faceless";
+
+  return "Creator";
+}
+
+function trendSpark(index) {
+  const colors = ["#27f58a", "#9b5cff", "#24c6ff", "#f7a21b", "#ff4fd8"];
+  const color = colors[index % colors.length];
+
+  return `
+    <svg width="54" height="20" viewBox="0 0 54 20" aria-hidden="true">
+      <polyline points="2,15 9,12 15,14 21,8 28,10 35,5 42,7 52,2"
+        fill="none"
+        stroke="${color}"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"/>
+    </svg>
+  `;
+}
+
+function audioWave() {
+  return `
+    <svg width="96" height="24" viewBox="0 0 96 24" aria-hidden="true">
+      ${Array.from({ length: 24 }).map((_, i) => {
+        const h = [6, 11, 17, 9, 20, 13, 7, 15, 22, 11, 16, 8, 19, 14, 6, 12, 18, 10, 21, 13, 7, 16, 11, 20][i];
+        const x = i * 4;
+        return `<rect x="${x}" y="${12 - h / 2}" width="2" height="${h}" rx="1" fill="#9b5cff" opacity="${0.45 + (i % 4) * 0.13}"/>`;
+      }).join("")}
+    </svg>
+  `;
+}
+
+function trendLineChart() {
+  return `
+    <svg viewBox="0 0 640 210" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="trendAreaPurple" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stop-color="#8b5cf6" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+
+      <g opacity="0.18" stroke="#ffffff">
+        <line x1="0" y1="40" x2="640" y2="40"/>
+        <line x1="0" y1="90" x2="640" y2="90"/>
+        <line x1="0" y1="140" x2="640" y2="140"/>
+        <line x1="0" y1="190" x2="640" y2="190"/>
+      </g>
+
+      <path d="M0,150 C60,120 100,95 150,102 C210,110 230,55 290,72 C350,90 375,58 430,66 C485,76 520,42 640,36 L640,210 L0,210 Z"
+        fill="url(#trendAreaPurple)"/>
+
+      <path d="M0,150 C60,120 100,95 150,102 C210,110 230,55 290,72 C350,90 375,58 430,66 C485,76 520,42 640,36"
+        fill="none"
+        stroke="#9b5cff"
+        stroke-width="4"
+        stroke-linecap="round"/>
+
+      <path d="M0,170 C65,145 105,132 160,136 C210,140 250,110 305,120 C365,130 405,98 455,104 C520,111 560,85 640,74"
+        fill="none"
+        stroke="#24c6ff"
+        stroke-width="3"
+        stroke-linecap="round"/>
+
+      <path d="M0,180 C70,160 120,150 180,152 C240,154 270,130 330,136 C390,142 430,120 490,122 C540,124 585,105 640,98"
+        fill="none"
+        stroke="#27f58a"
+        stroke-width="3"
+        stroke-linecap="round"/>
+    </svg>
+  `;
+}
+
 function scriptsPageV4() {
-  const latest = state.scripts[0];
+  const latest = activeScript();
+  const chats = normalizeList(state.scriptChats);
   return `
     <section class="page page-v4">
-      <div class="builder-layout script-builder-layout">
-        <form class="tool-card compact-form script-options" id="script-form">
+      <div class="studio-chat-layout script-studio-layout ${state.scriptAssistantOpen === false ? "assistant-closed" : ""}">
+        <aside class="thread-rail dashboard-card">
           <div class="card-topline">
-            <div><span class="section-kicker">Script Builder</span><h3>Compact controls</h3></div>
+            <div><span class="section-kicker">Saved chats</span><h3>Scripts</h3></div>
+            <button class="button secondary compact-button" type="button" data-action="v4-new-script-chat">New</button>
           </div>
-          ${selectCustom("script-idea", "Idea", ideaOptions(), state.selectedIdeaId || "Custom")}
-          ${fieldV4("script-custom-idea", "Custom idea", "", "text", "Used when Idea is custom")}
-          ${selectCustom("script-platform", "Platform", ["YouTube", "TikTok/Reel/Short", "Instagram", "Podcast", "Ad", "Short film", "Custom"])}
-          ${selectCustom("script-length", "Length", ["30 seconds", "60 seconds", "2 minutes", "5 minutes", "8 minutes", "Custom"])}
-          ${selectCustom("script-format", "Format", ["talking head", "vlog", "cinematic", "tutorial", "skit", "documentary", "product review", "ad", "short film", "Custom"])}
-          ${selectCustom("script-tone", "Tone", ["Use Creator DNA", "funny", "emotional", "cinematic", "direct", "Custom"])}
-          ${fieldV4("script-audience", "Audience", state.creator.audience, "text", "Who is this for?")}
-          <button class="button primary full-width" type="button" data-action="v4-generate-script">Generate script</button>
-        </form>
+          <div class="thread-list">
+            ${chats.length ? chats.map((chat) => threadButton(chat, state.activeScriptChatId, "v4-open-script-chat")).join("") : emptyMini("Generate a script to save the first chat.")}
+          </div>
+          <form class="compact-form script-brief-form" id="script-form">
+            ${selectCustom("script-idea", "Idea", ideaOptions(), state.selectedIdeaId || "Custom")}
+            ${fieldV4("script-custom-idea", "Custom idea", "", "text", "Example: Brain rot Roblox games and children")}
+            ${selectCustom("script-platform", "Platform", ["YouTube long video", "YouTube Short", "TikTok/Reel/Short", "Instagram", "Podcast", "Ad", "Short film", "Custom"])}
+            ${selectCustom("script-length", "Length", ["30 seconds", "60 seconds", "2 minutes", "5 minutes", "8 minutes", "12 minutes", "Custom"])}
+            ${selectCustom("script-format", "Format", ["talking head", "commentary", "documentary", "tutorial", "story video", "skit", "product review", "short film", "Custom"])}
+            ${fieldV4("script-audience", "Audience", state.creator.audience, "text", "Who is this for?")}
+            ${textareaV4("script-notes", "What must be included?", "", "Facts, examples, claims to avoid, sources, personal story, call to action.", "full")}
+            <button class="button primary full-width" type="button" data-action="v4-generate-script">Generate script</button>
+          </form>
+        </aside>
 
-        <section class="script-workspace">
-          <div class="card-topline">
-            <div><span class="section-kicker">Script output</span><h3>${latest?.title ? escapeHtml(latest.title) : "No script yet"}</h3></div>
-            ${latest ? `<button class="button secondary" type="button" data-action="v4-download-script">Download PDF</button>` : ""}
+        <main class="script-document-wrap">
+          <div class="card-topline document-topline">
+            <div><span class="section-kicker">Script document</span><h3>${latest?.title ? escapeHtml(latest.title) : "No script yet"}</h3></div>
+            <div class="action-row compact-actions">
+              ${latest ? `<button class="button secondary" type="button" data-action="v4-download-script">Download PDF</button>` : ""}
+              ${latest ? `<button class="button primary" type="button" data-action="v4-run-script-credibility">Credibility check</button>` : ""}
+              <button class="button secondary" type="button" data-action="v4-toggle-script-assistant">${state.scriptAssistantOpen === false ? "Open chat" : "Close chat"}</button>
+            </div>
           </div>
           <div id="script-output">
-            ${latest ? scriptOutputV4(latest) : emptyPanel("Generate your first script", "Choose an idea or custom concept. The script length changes based on your selected duration.", "PDF export creates a formatted script document.")}
+            ${latest ? scriptOutputV4(latest) : emptyPanel("Generate a speaking script", "Fill the brief on the left. Contentus will create a real presenter script with exact words to say, beats, visual notes, and credibility reminders.", "Saved chats appear on the left. Use the assistant to request changes and implement suggestions.")}
           </div>
-          ${latest ? scriptButtonsV4() : ""}
-        </section>
+          ${state.scriptCredibilityReport ? credibilityReportPanel(state.scriptCredibilityReport) : ""}
+        </main>
+
+        <aside class="assistant-panel dashboard-card">
+          ${scriptAssistantPanel(latest)}
+        </aside>
       </div>
     </section>
   `;
@@ -2781,25 +3211,103 @@ function scriptButtonsV4() {
 }
 
 function scriptOutputV4(script) {
+  const beats = normalizeList(script.beats || script.sections || script.scenes);
   return `
-    <article class="dashboard-card script-output-card">
+    <article class="script-document script-output-card">
       <div class="score-grid">
         ${scoreChip("Authenticity", `${script.authenticityScore || "?"}%`)}
         ${scoreChip("Generic risk", script.genericRisk || "Low")}
         ${scoreChip("Length", script.lengthLabel || script.targetLength || "Custom")}
-        ${scoreChip("Disclosure", script.disclosure || "AI-assisted if used")}
+        ${scoreChip("Words", formatNumber(wordCount(script.script || "")))}
       </div>
-      ${sectionBlock("Hook options", listText(script.hookOptions))}
-      ${sectionBlock("Full script", script.script)}
-      ${sectionBlock("Scene-by-scene", listText(script.scenes || script.sceneBreakdown))}
-      ${sectionBlock("Voiceover", script.voiceover)}
-      ${sectionBlock("Shot list", listText(script.shotList))}
-      ${sectionBlock("B-roll", listText(script.broll || script.bRollSuggestions))}
-      ${sectionBlock("On-screen text", listText(script.onScreenText))}
-      ${sectionBlock("Caption", script.caption)}
-      ${sectionBlock("Hashtags", listText(script.hashtags))}
-      ${sectionBlock("Ending options", listText(script.endingOptions))}
-      ${sectionBlock("Personalization tip", script.personalizationTip)}
+      <div class="script-page">
+        <header class="script-doc-header">
+          <span>${escapeHtml(script.platform || "Content")}</span>
+          <h2>${escapeHtml(script.title || "Untitled script")}</h2>
+          <p>${escapeHtml(script.logline || script.personalizationTip || "A speaking-first script built for the selected platform.")}</p>
+        </header>
+        ${script.coldOpen ? scriptSpeechSection("Cold open", script.coldOpen, "0:00") : ""}
+        ${script.intro ? scriptSpeechSection("Intro", script.intro, "0:10") : ""}
+        ${beats.length ? beats.map((beat, index) => scriptBeatBlock(beat, index)).join("") : scriptSpeechSection("Full spoken script", script.script || "", "Script")}
+        ${script.outro ? scriptSpeechSection("Ending", script.outro, "Final beat") : ""}
+      </div>
+      <div class="script-production-grid">
+        ${sectionBlock("Hook options", listText(script.hookOptions))}
+        ${sectionBlock("Visual notes", listText(script.visualNotes || script.shotList || script.broll))}
+        ${sectionBlock("On-screen text", listText(script.onScreenText))}
+        ${sectionBlock("Caption", script.caption)}
+        ${sectionBlock("Credibility notes", listText(script.credibilityNotes || script.claimsToVerify))}
+        ${sectionBlock("Personalization tip", script.personalizationTip)}
+      </div>
+    </article>
+  `;
+}
+
+function scriptSpeechSection(title, text, time = "") {
+  if (!text) return "";
+  return `
+    <section class="script-speech-section">
+      <div class="script-section-label"><span>${escapeHtml(time)}</span><strong>${escapeHtml(title)}</strong></div>
+      <p>${escapeHtml(text)}</p>
+    </section>
+  `;
+}
+
+function scriptBeatBlock(beat, index) {
+  const label = beat.time || beat.timestamp || `Beat ${index + 1}`;
+  const title = beat.title || beat.name || `Section ${index + 1}`;
+  const speech = beat.spokenLines || beat.speech || beat.script || beat.text || String(beat);
+  return `
+    <section class="script-speech-section">
+      <div class="script-section-label"><span>${escapeHtml(label)}</span><strong>${escapeHtml(title)}</strong></div>
+      <p>${escapeHtml(speech)}</p>
+      ${beat.visual ? `<small><strong>Visual:</strong> ${escapeHtml(beat.visual)}</small>` : ""}
+      ${beat.intent ? `<small><strong>Purpose:</strong> ${escapeHtml(beat.intent)}</small>` : ""}
+    </section>
+  `;
+}
+
+function scriptAssistantPanel(script) {
+  const chat = activeScriptChat();
+  return `
+    <div class="card-topline">
+      <div><span class="section-kicker">Assistant</span><h3>Refine the script</h3></div>
+    </div>
+    <div class="assistant-messages">
+      ${chat?.messages?.length ? chat.messages.map(chatBubble).join("") : emptyMini("Ask for changes like: make the hook more direct, add examples, verify claims, or make it less dramatic.")}
+    </div>
+    <div class="tool-button-strip compact-strip">
+      ${["Tighter hook", "More human", "Add proof", "Simplify wording"].map((label) => `<button class="button secondary" type="button" data-action="v4-script-assistant-suggest" data-prompt="${escapeHtml(label)}">${label}</button>`).join("")}
+    </div>
+    <div class="assistant-compose">
+      <textarea id="script-chat-input" placeholder="Tell Contentus what to change..."></textarea>
+      <button class="button primary" type="button" data-action="v4-script-chat-send" ${script ? "" : "disabled"}>Send</button>
+    </div>
+    <button class="button secondary full-width" type="button" data-action="v4-run-script-credibility" ${script ? "" : "disabled"}>Credibility check</button>
+  `;
+}
+
+function credibilityReportPanel(report) {
+  return `
+    <article class="dashboard-card credibility-report">
+      <div class="card-topline">
+        <div><span class="section-kicker">Credibility report</span><h3>${escapeHtml(report.verdict || "Review needed")}</h3></div>
+        <span class="badge ${Number(report.score || 0) > 79 ? "good" : "warn"}">${escapeHtml(report.score || "?")}/100</span>
+      </div>
+      <div class="score-grid">
+        ${scoreChip("Claims", report.claimRisk || "Medium")}
+        ${scoreChip("Audience trust", `${report.trustScore || "?"}%`)}
+        ${scoreChip("Originality", `${report.originality || "?"}%`)}
+      </div>
+      <div class="list-stack">
+        ${normalizeList(report.suggestions).map((item, index) => `
+          <div class="insight-item">
+            <strong>${escapeHtml(item.title || `Suggestion ${index + 1}`)}</strong>
+            <p>${escapeHtml(item.reason || item.text || item)}</p>
+            <button class="button secondary" type="button" data-action="v4-implement-script-suggestion" data-index="${index}">Implement suggestion</button>
+          </div>
+        `).join("")}
+      </div>
     </article>
   `;
 }
@@ -2867,27 +3375,52 @@ function adOutputV4(project) {
 }
 
 function thumbnailPageV4() {
+  const chat = activeThumbnailChat();
   return `
     <section class="page page-v4">
-      <div class="builder-layout thumbnail-layout">
-        <form class="tool-card compact-form" id="thumbnail-form">
-          <div class="card-topline"><div><span class="section-kicker">Thumbnail Designer</span><h3>Canvas-first, low-token</h3></div></div>
-          ${selectCustom("thumb-idea", "Idea", ideaOptions(), state.selectedIdeaId || "Custom")}
-          ${fieldV4("thumb-title", "Main text", selectedIdea()?.title || "", "text", "Big thumbnail text")}
-          ${fieldV4("thumb-subtitle", "Support text", "", "text", "Optional small text")}
-          ${selectCustom("thumb-style", "Style", ["clean proof", "bold challenge", "cinematic", "tutorial", "reaction", "Custom"])}
-          ${selectCustom("thumb-palette", "Palette", ["cyan coral gold", "lime blue white", "red yellow black", "white teal charcoal", "Custom"])}
-          ${selectCustom("thumb-layout", "Layout", ["big text left", "split text visual", "center impact", "minimal", "Custom"])}
-          <div class="action-row compact-actions">
-            <button class="button primary" type="button" data-action="v4-generate-thumbnail">Generate thumbnail</button>
-            <button class="button secondary" type="button" data-action="v4-thumbnail-copy">Suggest title text</button>
+      <div class="thumbnail-studio-layout">
+        <aside class="thread-rail dashboard-card">
+          <div class="card-topline">
+            <div><span class="section-kicker">Saved chats</span><h3>Thumbnails</h3></div>
+            <button class="button secondary compact-button" type="button" data-action="v4-new-thumbnail-chat">New</button>
           </div>
-          <button class="button secondary full-width" type="button" data-action="v4-download-thumbnail">Download PNG</button>
-        </form>
-        <section class="thumbnail-stage">
-          <canvas id="thumbnail-canvas" width="1280" height="720" aria-label="Generated thumbnail preview"></canvas>
-          <div id="thumbnail-copy-output" class="dashboard-card mini-output">${emptyMini("Optional AI copy suggestions will appear here.")}</div>
+          <div class="thread-list">
+            ${state.thumbnailChats.length ? state.thumbnailChats.map((item) => threadButton(item, state.activeThumbnailChatId, "v4-open-thumbnail-chat")).join("") : emptyMini("Generate a thumbnail to save a design chat.")}
+          </div>
+          <form class="compact-form" id="thumbnail-form">
+            ${selectCustom("thumb-idea", "Idea", ideaOptions(), state.selectedIdeaId || "Custom")}
+            ${fieldV4("thumb-title", "Main text", selectedIdea()?.title || "", "text", "Example: Roblox Brain Rot?")}
+            ${textareaV4("thumb-idea-brief", "Type your thumbnail idea", "", "Describe the visual, emotion, object, person, contrast, or what area you want to improve.", "full")}
+            <button class="button primary full-width" type="button" data-action="v4-generate-thumbnail">Generate thumbnail</button>
+            <button class="button secondary full-width" type="button" data-action="v4-download-thumbnail">Download PNG</button>
+          </form>
+        </aside>
+
+        <section class="thumbnail-canvas-column">
+          <div class="card-topline">
+            <div><span class="section-kicker">Generated design</span><h3>${escapeHtml(chat?.title || "Thumbnail canvas")}</h3></div>
+            <span class="badge">Drag on canvas to box an area</span>
+          </div>
+          <div class="thumbnail-canvas-frame">
+            <canvas id="thumbnail-canvas" width="1280" height="720" aria-label="Generated thumbnail preview"></canvas>
+          </div>
+          <div id="thumbnail-copy-output" class="dashboard-card mini-output">${chat?.messages?.length ? chat.messages.map(chatBubble).join("") : emptyMini("Thumbnail suggestions and updates will appear here.")}</div>
         </section>
+
+        <aside class="assistant-panel dashboard-card">
+          <div class="card-topline"><div><span class="section-kicker">Suggest updates</span><h3>Design assistant</h3></div></div>
+          <p class="muted">Select a region on the canvas, then ask for a change. Contentus will update the generated layout and save the chat.</p>
+          <div class="assistant-messages compact-chat">
+            ${chat?.messages?.length ? chat.messages.map(chatBubble).join("") : emptyMini("Try: make text shorter, add stronger contrast, focus the face area, or make it less cluttered.")}
+          </div>
+          <div class="tool-button-strip compact-strip">
+            ${["More contrast", "Shorter text", "Bigger focal point", "Less clutter"].map((label) => `<button class="button secondary" type="button" data-action="v4-thumbnail-suggest" data-prompt="${escapeHtml(label)}">${label}</button>`).join("")}
+          </div>
+          <div class="assistant-compose">
+            <textarea id="thumb-chat-input" placeholder="Describe the update you want..."></textarea>
+            <button class="button primary" type="button" data-action="v4-thumbnail-chat-send">Update</button>
+          </div>
+        </aside>
       </div>
     </section>
   `;
@@ -2932,6 +3465,54 @@ function authOutputV4(result) {
       ${sectionBlock("What to fix", listText(result.suggestions || result.tips))}
       ${sectionBlock("Rewritten version", result.rewrittenVersion || result.rewrite)}
       ${sectionBlock("Disclosure", result.disclosureRecommendation || result.disclosure)}
+    </article>
+  `;
+}
+
+function videoCheckerPageV4() {
+  const latest = state.videoChecks[0];
+  return `
+    <section class="page page-v4">
+      <div class="tool-grid-hero">
+        <form class="dashboard-card compact-form" id="video-check-form">
+          <div class="card-topline"><div><span class="section-kicker">Video Checker</span><h3>Upload or paste YouTube</h3></div></div>
+          ${fieldV4("video-check-url", "YouTube video URL", "", "url", "Optional public video URL")}
+          <div class="form-field">
+            <label for="video-check-file">Upload video</label>
+            <input id="video-check-file" type="file" accept="video/*,audio/*">
+            <small>Gemini can inspect supported media when your API key is configured.</small>
+          </div>
+          ${textareaV4("video-check-context", "Context", "", "Target audience, platform, goal, concerns, or what you want improved.", "full")}
+          <button class="button primary full-width" type="button" data-action="v4-video-check">Analyze video</button>
+        </form>
+        <section id="video-check-output" class="output-column">
+          ${latest ? videoCheckOutput(latest) : emptyPanel("No video checked yet", "Upload a video/audio sample or paste a YouTube URL. Contentus scores audio, visuals, title, thumbnail, pacing, and audience fit.", "The report is detailed but written for a creator, not a data scientist.")}
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function videoCheckOutput(report) {
+  return `
+    <article class="dashboard-card report-card">
+      <div class="card-topline">
+        <div><span class="section-kicker">Video report</span><h3>${escapeHtml(report.title || "Video analysis")}</h3></div>
+        <span class="badge ${Number(report.totalScore || 0) > 74 ? "good" : "warn"}">${escapeHtml(report.totalScore || "?")}/100</span>
+      </div>
+      <div class="score-grid">
+        ${scoreChip("Audio", `${report.audioScore || "?"}%`)}
+        ${scoreChip("Visuals", `${report.visualScore || "?"}%`)}
+        ${scoreChip("Title", `${report.titleScore || "?"}%`)}
+        ${scoreChip("Thumbnail", `${report.thumbnailScore || "?"}%`)}
+        ${scoreChip("Pacing", `${report.pacingScore || "?"}%`)}
+        ${scoreChip("Audience", report.targetAudience || "Unknown")}
+      </div>
+      ${sectionBlock("Summary", report.summary)}
+      ${sectionBlock("What is working", listText(report.working))}
+      ${sectionBlock("What to improve", listText(report.improvements))}
+      ${sectionBlock("Audience currently reached", report.audienceFit)}
+      ${sectionBlock("Next edit checklist", listText(report.editChecklist))}
     </article>
   `;
 }
@@ -3031,6 +3612,25 @@ function selectedVideoPanel(video) {
       ${insight("Improve", "If comments are low, test a clearer question in the outro and pinned comment.")}
       ${insight("Community", video.commentsDisabled ? "Comments are disabled for this video. Choose another video to analyze comments." : "Open comments to draft replies and find video ideas.")}
     </div>
+    <div class="action-row">
+      <button class="button primary" type="button" data-action="v4-detailed-video-analysis" data-video-id="${escapeHtml(video.id)}">Detailed analysis</button>
+      <button class="button secondary" type="button" data-action="v4-video-to-publish" data-video-id="${escapeHtml(video.id)}">Prepare publishing pack</button>
+    </div>
+    ${detailedVideoReportFor(video.id) ? detailedVideoReportOutput(detailedVideoReportFor(video.id)) : ""}
+  `;
+}
+
+function detailedVideoReportOutput(report) {
+  return `
+    <article class="mini-report">
+      <span class="section-kicker">Detailed analysis</span>
+      <h4>${escapeHtml(report.verdict || "Growth diagnosis")}</h4>
+      <div class="mini-bars">
+        ${(report.graphs || []).map((item) => `<span style="--w:${Number(item.value || 0)}%"><b>${escapeHtml(item.label)}</b></span>`).join("")}
+      </div>
+      ${sectionBlock("Improve this video", listText(report.improvements))}
+      ${sectionBlock("Follow-up ideas", listText(report.followUps))}
+    </article>
   `;
 }
 
@@ -3151,6 +3751,7 @@ function calendarPageV4() {
           <button class="button secondary full-width" type="button" data-action="v4-weekly-plan">Generate weekly plan</button>
         </aside>
       </div>
+      ${state.selectedCalendarDate ? calendarDayModal(state.selectedCalendarDate, items, googleEvents) : ""}
     </section>
   `;
 }
@@ -3159,18 +3760,120 @@ function calendarCellV5(cell, items, googleEvents) {
   const dateKey = formatInputDate(cell.date);
   const appItems = items.filter((item) => item.date === dateKey || (!item.date && Number(item.day) === cell.date.getDate() && cell.inMonth));
   const gItems = googleEvents.filter((event) => event.date === dateKey);
+  const allItems = [...gItems, ...appItems];
   return `
-    <div class="calendar-day calendar-day-v5 ${cell.inMonth ? "" : "muted-day"} ${isToday(cell.date) ? "today" : ""}" data-day="${cell.date.getDate()}">
+    <button class="calendar-day calendar-day-v5 ${cell.inMonth ? "" : "muted-day"} ${isToday(cell.date) ? "today" : ""}" type="button" data-action="v4-open-calendar-day" data-date="${dateKey}" data-day="${cell.date.getDate()}">
       <strong>${cell.date.getDate()}</strong>
-      ${gItems.map((event) => `<article class="calendar-item google-event"><span>Google</span><p>${escapeHtml(event.title)}</p><small>${escapeHtml(event.time || "All day")}</small></article>`).join("")}
-      ${appItems.map((item) => `
-        <article class="calendar-item" draggable="true" data-calendar-id="${escapeHtml(item.id)}">
-          <span>${escapeHtml(item.platform || "Contentus")}</span>
-          <p>${escapeHtml(item.title)}</p>
-          <small>${escapeHtml(item.status || item.startTime || "idea")}</small>
-        </article>
-      `).join("")}
+      <div class="calendar-brief-list">
+        ${allItems.slice(0, 3).map((item) => `<span class="calendar-brief ${item.source === "google" ? "google-event" : ""}">${escapeHtml(shortTitle(item.title))}</span>`).join("")}
+        ${allItems.length > 3 ? `<span class="calendar-more">+${allItems.length - 3} more</span>` : ""}
+      </div>
+    </button>
+  `;
+}
+
+function calendarDayModal(dateKey, items, googleEvents) {
+  const dayItems = [
+    ...googleEvents.filter((event) => event.date === dateKey).map((event) => ({ ...event, source: "Google" })),
+    ...items.filter((item) => item.date === dateKey || (!item.date && Number(item.day) === Number(dateKey.slice(-2)))).map((item) => ({ ...item, source: item.platform || "Contentus" })),
+  ].sort((a, b) => String(a.startTime || a.time || "").localeCompare(String(b.startTime || b.time || "")));
+  return `
+    <div class="modal-backdrop active" role="dialog" aria-modal="true">
+      <article class="modal-panel day-modal-panel">
+        <div class="card-topline">
+          <div><span class="section-kicker">Day timetable</span><h3>${escapeHtml(formatDate(dateKey))}</h3></div>
+          <button class="button secondary" type="button" data-action="v4-close-calendar-day">Close</button>
+        </div>
+        <div class="day-timeline">
+          ${dayItems.length ? dayItems.map((item) => `
+            <div class="timeline-row">
+              <time>${escapeHtml(item.startTime || item.time || "All day")}</time>
+              <div>
+                <strong>${escapeHtml(item.title || "Untitled")}</strong>
+                <p>${escapeHtml(item.notes || item.status || item.source || "")}</p>
+              </div>
+            </div>
+          `).join("") : emptyPanel("Nothing planned", "Add an event from the calendar panel and it will appear here.", "Google events show here after linking and loading Calendar.")}
+        </div>
+      </article>
     </div>
+  `;
+}
+
+function publishingPageV4() {
+  const latest = state.publishingJobs[0];
+  return `
+    <section class="page page-v4">
+      <div class="tool-grid-hero">
+        <form class="dashboard-card compact-form" id="publish-form">
+          <div class="card-topline"><div><span class="section-kicker">Publishing Hub</span><h3>One video, many platforms</h3></div></div>
+          ${selectCustom("publish-source", "Source", publishingSourceOptions(), state.selectedVideoId || "Custom")}
+          ${fieldV4("publish-title", "Upload title", selectedVideo()?.title || "", "text", "Title for YouTube or export pack")}
+          <div class="form-field">
+            <label for="publish-file">Video file</label>
+            <input id="publish-file" type="file" accept="video/*">
+            <small>YouTube upload requires Google OAuth with upload permission. Other platforms export ready-to-post packs.</small>
+          </div>
+          <div class="toggle-group platform-toggle-group">
+            ${["YouTube", "TikTok", "Instagram Reels", "LinkedIn", "X/Twitter"].map((platform) => `<button class="pill-button active" type="button" data-action="toggle-pill">${platform}</button>`).join("")}
+          </div>
+          ${textareaV4("publish-notes", "Publishing notes", "", "Any captions, compliance notes, or audience goals.", "full")}
+          <button class="button primary full-width" type="button" data-action="v4-create-publish-pack">Create platform pack</button>
+          <button class="button secondary full-width" type="button" data-action="v4-upload-youtube">Upload to YouTube</button>
+        </form>
+        <section id="publish-output" class="output-column">
+          ${latest ? publishingJobOutput(latest) : emptyPanel("No publishing pack yet", "Upload a video or select a YouTube video. Contentus creates platform captions, descriptions, title variants, and repurpose instructions.", "Only YouTube upload can be automated from this app with Google OAuth. TikTok/Instagram need their own platform API credentials.")}
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function publishingJobOutput(job) {
+  return `
+    <article class="dashboard-card report-card">
+      <div class="card-topline">
+        <div><span class="section-kicker">Publishing pack</span><h3>${escapeHtml(job.title || "Untitled pack")}</h3></div>
+        <span class="badge ${job.uploaded ? "good" : "warn"}">${job.uploaded ? "Uploaded" : "Ready"}</span>
+      </div>
+      <div class="list-stack">
+        ${normalizeList(job.platforms).map((platform) => insight(platform.name || platform.platform, `${platform.title || ""} ${platform.caption || ""}`.trim())).join("")}
+      </div>
+      ${sectionBlock("Agent notes", listText(job.agentNotes))}
+      ${job.youtubeUploadMessage ? sectionBlock("YouTube upload", job.youtubeUploadMessage) : ""}
+    </article>
+  `;
+}
+
+function coachPageV4() {
+  const messages = normalizeList(state.coachChats);
+  return `
+    <section class="page page-v4">
+      <div class="coach-layout">
+        <article class="dashboard-card coach-context-card">
+          <span class="section-kicker">Channel context</span>
+          <h3>${escapeHtml(state.youtube?.channel?.title || "No YouTube channel linked")}</h3>
+          <p class="muted">Ask what to improve, what videos to make next, or how to package your ideas without losing your voice.</p>
+          <div class="score-grid">
+            ${scoreChip("Ideas", state.ideas.length)}
+            ${scoreChip("Scripts", state.scripts.length)}
+            ${scoreChip("Videos", normalizeList(state.youtube?.videos).length)}
+          </div>
+          <div class="tool-button-strip compact-strip">
+            ${["What should I make next?", "Why is my channel not growing?", "Improve my next 5 videos", "Find content gaps"].map((prompt) => `<button class="button secondary" type="button" data-action="v4-coach-prompt" data-prompt="${escapeHtml(prompt)}">${prompt}</button>`).join("")}
+          </div>
+        </article>
+        <section class="dashboard-card coach-chat-card">
+          <div class="assistant-messages coach-messages">
+            ${messages.length ? messages.map(chatBubble).join("") : emptyPanel("Ask Contentus anything", "This is your strategy conversation. It uses your saved ideas, scripts, Creator DNA, and linked YouTube data.", "No private data leaves your workspace except what is sent to your configured AI provider for generation.")}
+          </div>
+          <div class="assistant-compose">
+            <textarea id="coach-input" placeholder="Ask what to improve on your channel..."></textarea>
+            <button class="button primary" type="button" data-action="v4-coach-send">Send</button>
+          </div>
+        </section>
+      </div>
+    </section>
   `;
 }
 
@@ -3228,18 +3931,33 @@ document.addEventListener("click", async (event) => {
   if (action === "v4-generate-ideas") return handleGenerateIdeasV4(button);
   if (action === "v4-use-idea") return handleUseIdeaV4(button.dataset.ideaId);
   if (action === "v4-save-idea-calendar") return saveIdeaToCalendar(button.dataset.ideaId);
+  if (action === "v4-analyze-trends") return handleAnalyzeTrendsV4(button);
   if (action === "v4-generate-script") return handleGenerateScriptV4(button);
   if (action === "v4-transform-script") return handleTransformScriptV4(button);
+  if (action === "v4-new-script-chat") return newScriptChat();
+  if (action === "v4-open-script-chat") return openScriptChat(button.dataset.chatId);
+  if (action === "v4-toggle-script-assistant") return toggleScriptAssistant();
+  if (action === "v4-script-chat-send") return handleScriptChatSend(button);
+  if (action === "v4-script-assistant-suggest") return handleScriptAssistantPrompt(button.dataset.prompt, button);
+  if (action === "v4-run-script-credibility") return handleScriptCredibility(button);
+  if (action === "v4-implement-script-suggestion") return implementScriptSuggestion(button.dataset.index);
   if (action === "v4-run-auth-from-script") return runAuthFromScriptV4();
   if (action === "v4-save-script-calendar") return saveScriptToCalendar();
   if (action === "v4-download-script") return downloadLatestScriptPdf();
   if (action === "v4-generate-ad") return handleGenerateAdV4(button);
   if (action === "v4-generate-thumbnail") return generateThumbnailCanvas();
+  if (action === "v4-new-thumbnail-chat") return newThumbnailChat();
+  if (action === "v4-open-thumbnail-chat") return openThumbnailChat(button.dataset.chatId);
+  if (action === "v4-thumbnail-chat-send") return handleThumbnailChatSend(button);
+  if (action === "v4-thumbnail-suggest") return handleThumbnailSuggestion(button.dataset.prompt, button);
   if (action === "v4-thumbnail-copy") return handleThumbnailCopy(button);
   if (action === "v4-download-thumbnail") return downloadThumbnailPng();
+  if (action === "v4-video-check") return handleVideoCheckV4(button);
   if (action === "v4-score-auth") return handleScoreAuthenticityV4(button);
   if (action === "v4-link-youtube") return handleLinkYouTubeV4(button);
   if (action === "v4-select-video") return handleSelectVideoV4(button.dataset.videoId);
+  if (action === "v4-detailed-video-analysis") return handleDetailedVideoAnalysis(button);
+  if (action === "v4-video-to-publish") return videoToPublishing(button.dataset.videoId);
   if (action === "v4-load-comments") return handleLoadCommentsV4(button);
   if (action === "v4-generate-replies") return handleGenerateRepliesV4(button);
   if (action === "v4-post-reply") return handlePostReplyV4(button);
@@ -3247,10 +3965,12 @@ document.addEventListener("click", async (event) => {
   if (action === "v4-load-calendar") return handleLoadGoogleCalendarV4(button);
   if (action === "v4-add-calendar-event") return handleAddCalendarEventV4(button);
   if (action === "v4-calendar-nav") return handleCalendarNavV4(button.dataset.direction);
-  if (action === "v4-tutorial-next") return handleTutorialNav(1);
-  if (action === "v4-tutorial-back") return handleTutorialNav(-1);
-  if (action === "v4-tutorial-skip") return finishTutorial();
-  if (action === "v4-restart-tutorial") return restartTutorial();
+  if (action === "v4-open-calendar-day") return openCalendarDay(button.dataset.date);
+  if (action === "v4-close-calendar-day") return closeCalendarDay();
+  if (action === "v4-create-publish-pack") return handleCreatePublishPack(button);
+  if (action === "v4-upload-youtube") return handleUploadYouTube(button);
+  if (action === "v4-coach-send") return handleCoachSend(button);
+  if (action === "v4-coach-prompt") return handleCoachPrompt(button.dataset.prompt, button);
   if (action === "v4-comment-to-idea") return commentToIdea(button.dataset.commentId);
   if (action === "v4-weekly-plan") return handleWeeklyPlanV4(button);
 });
@@ -3376,6 +4096,31 @@ async function handleGenerateIdeasV4(button) {
   });
 }
 
+async function handleAnalyzeTrendsV4(button) {
+  await withBusy(button, "Analyzing...", async () => {
+    const payload = {
+      platform: customValue("trend-platform"),
+      niche: document.querySelector("#trend-niche")?.value.trim(),
+      idea: document.querySelector("#trend-idea")?.value.trim(),
+      creator: state.creator,
+      dna: state.dna,
+    };
+    if (!payload.platform || !payload.niche) {
+      toast("Choose a platform and niche first.");
+      return;
+    }
+    const result = await apiJson("/api/ai/trends", { method: "POST", body: payload });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Trend analysis failed.");
+      return;
+    }
+    state.trendReports.unshift({ id: `trend-${Date.now()}`, createdAt: new Date().toISOString(), ...result.data });
+    saveState();
+    render();
+    toast("Trend report ready.");
+  });
+}
+
 function handleUseIdeaV4(id) {
   state.selectedIdeaId = id;
   saveState();
@@ -3392,8 +4137,8 @@ async function handleGenerateScriptV4(button) {
       platform: customValue("script-platform"),
       length: customValue("script-length"),
       format: customValue("script-format"),
-      tone: customValue("script-tone"),
       audience: document.querySelector("#script-audience")?.value.trim() || state.creator.audience,
+      notes: document.querySelector("#script-notes")?.value.trim(),
       creator: state.creator,
       dna: state.dna,
     };
@@ -3412,6 +4157,19 @@ async function handleGenerateScriptV4(button) {
       ...result.data,
     };
     state.scripts.unshift(script);
+    const chat = {
+      id: `script-chat-${Date.now()}`,
+      title: script.title,
+      scriptId: script.id,
+      createdAt: new Date().toISOString(),
+      messages: [
+        { role: "assistant", text: "I drafted the script as a speaking document. Ask for changes in the right panel, then implement the suggestions you like." },
+      ],
+    };
+    state.scriptChats.unshift(chat);
+    state.activeScriptChatId = chat.id;
+    state.scriptAssistantOpen = true;
+    state.scriptCredibilityReport = null;
     saveState();
     render();
     toast("Script generated.");
@@ -3437,10 +4195,99 @@ async function handleTransformScriptV4(button) {
       return;
     }
     state.scripts[0] = { ...latest, ...result.data, id: latest.id, updatedAt: new Date().toISOString() };
+    appendScriptChat("assistant", `Applied: ${button.dataset.transform}`);
     saveState();
     render();
     toast("Script updated.");
   });
+}
+
+function newScriptChat() {
+  state.activeScriptChatId = "";
+  state.scriptCredibilityReport = null;
+  saveState();
+  render();
+}
+
+function openScriptChat(id) {
+  state.activeScriptChatId = id || "";
+  const chat = activeScriptChat();
+  if (chat?.scriptId) {
+    const script = state.scripts.find((item) => item.id === chat.scriptId);
+    if (script) state.scripts = [script, ...state.scripts.filter((item) => item.id !== script.id)];
+  }
+  saveState();
+  render();
+}
+
+function toggleScriptAssistant() {
+  state.scriptAssistantOpen = state.scriptAssistantOpen === false;
+  saveState();
+  render();
+}
+
+async function handleScriptChatSend(button) {
+  const prompt = document.querySelector("#script-chat-input")?.value.trim();
+  if (!prompt) return;
+  await handleScriptAssistantPrompt(prompt, button);
+}
+
+async function handleScriptAssistantPrompt(prompt, button) {
+  const latest = activeScript();
+  if (!latest) return;
+  appendScriptChat("user", prompt);
+  await withBusy(button, "Thinking...", async () => {
+    const result = await apiJson("/api/ai/script", {
+      method: "POST",
+      body: {
+        rewriteInstruction: prompt,
+        existingScript: latest,
+        creator: state.creator,
+        dna: state.dna,
+        length: latest.lengthLabel,
+      },
+    });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Script update failed.");
+      return;
+    }
+    const updated = { ...latest, ...result.data, id: latest.id, updatedAt: new Date().toISOString() };
+    state.scripts = [updated, ...state.scripts.filter((item) => item.id !== latest.id)];
+    appendScriptChat("assistant", "I updated the script document. Review the changed sections in the center panel.");
+    saveState();
+    render();
+  });
+}
+
+async function handleScriptCredibility(button) {
+  const latest = activeScript();
+  if (!latest) return;
+  await withBusy(button, "Checking...", async () => {
+    const result = await apiJson("/api/ai/credibility", {
+      method: "POST",
+      body: { script: latest, creator: state.creator, dna: state.dna },
+    });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Credibility check failed.");
+      return;
+    }
+    state.scriptCredibilityReport = result.data;
+    appendScriptChat("assistant", "Credibility report is ready. Use the implement buttons for fixes you want.");
+    saveState();
+    render();
+  });
+}
+
+function implementScriptSuggestion(index) {
+  const latest = activeScript();
+  const suggestion = normalizeList(state.scriptCredibilityReport?.suggestions)[Number(index)];
+  if (!latest || !suggestion) return;
+  latest.credibilityNotes = normalizeList(latest.credibilityNotes);
+  latest.credibilityNotes.push(suggestion.implementation || suggestion.text || suggestion.reason || "Credibility suggestion applied.");
+  latest.personalizationTip = suggestion.implementation || latest.personalizationTip;
+  appendScriptChat("assistant", `Implemented suggestion: ${suggestion.title || suggestion.text || "Credibility fix"}`);
+  saveState();
+  render();
 }
 
 function runAuthFromScriptV4() {
@@ -3588,8 +4435,15 @@ async function handleLoadCommentsV4(button) {
       videoTitle: videoTitleFor(comment.videoId || videoId),
     }));
     saveState();
-    routeTo("/app/community");
-    toast("Comments loaded.");
+    if (state.comments.length) {
+      routeTo("/app/community");
+      render();
+      toast("Comments loaded.");
+    } else {
+      routeTo("/app/community");
+      render();
+      toast("No public comments found for this video yet.");
+    }
   });
 }
 
@@ -3633,6 +4487,62 @@ async function handlePostReplyV4(button) {
     render();
     toast("Reply posted to YouTube.");
   });
+}
+
+async function handleVideoCheckV4(button) {
+  await withBusy(button, "Analyzing...", async () => {
+    const file = document.querySelector("#video-check-file")?.files?.[0];
+    const media = file ? await fileToBase64(file) : null;
+    const payload = {
+      youtubeUrl: document.querySelector("#video-check-url")?.value.trim(),
+      context: document.querySelector("#video-check-context")?.value.trim(),
+      media,
+      creator: state.creator,
+      dna: state.dna,
+    };
+    if (!payload.youtubeUrl && !media) {
+      toast("Paste a YouTube URL or upload a video/audio file.");
+      return;
+    }
+    const result = await apiJson("/api/ai/video-checker", { method: "POST", body: payload });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Video check failed.");
+      return;
+    }
+    state.videoChecks.unshift({ id: `video-check-${Date.now()}`, createdAt: new Date().toISOString(), ...result.data });
+    saveState();
+    render();
+    toast("Video report ready.");
+  });
+}
+
+async function handleDetailedVideoAnalysis(button) {
+  const videoId = button.dataset.videoId;
+  const video = normalizeList(state.youtube?.videos || state.youtube?.recentVideos).find((item) => item.id === videoId);
+  if (!video) return;
+  await withBusy(button, "Analyzing...", async () => {
+    const result = await apiJson("/api/ai/video-detail", {
+      method: "POST",
+      body: { video, channel: state.youtube?.channel, comments: state.comments.filter((item) => item.videoId === videoId), creator: state.creator, dna: state.dna },
+    });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Detailed analysis failed.");
+      return;
+    }
+    state.detailedVideoReports = [{ id: `detail-${Date.now()}`, videoId, createdAt: new Date().toISOString(), ...result.data }, ...state.detailedVideoReports.filter((item) => item.videoId !== videoId)].slice(0, 20);
+    saveState();
+    render();
+    toast("Detailed video analysis ready.");
+  });
+}
+
+function videoToPublishing(videoId) {
+  const video = normalizeList(state.youtube?.videos || state.youtube?.recentVideos).find((item) => item.id === videoId);
+  if (video) {
+    state.pendingPublishVideo = video;
+    saveState();
+  }
+  routeTo("/app/publishing");
 }
 
 async function handleGoogleConnectV4(button) {
@@ -3765,31 +4675,136 @@ function handleCalendarNavV4(direction) {
   render();
 }
 
-function handleTutorialNav(delta) {
-  const max = tutorialStepsV4().length - 1;
-  const next = Number(state.tutorialStep || 0) + delta;
-  if (next > max) {
-    finishTutorial();
-    return;
+function openCalendarDay(dateKey) {
+  state.selectedCalendarDate = dateKey;
+  saveState();
+  render();
+}
+
+function closeCalendarDay() {
+  state.selectedCalendarDate = "";
+  saveState();
+  render();
+}
+
+async function handleCreatePublishPack(button) {
+  await withBusy(button, "Creating...", async () => {
+    const selected = customValue("publish-source");
+    const video = selected === "Custom" ? state.pendingPublishVideo : normalizeList(state.youtube?.videos || state.youtube?.recentVideos).find((item) => item.id === selected) || state.pendingPublishVideo;
+    const platforms = [...document.querySelectorAll(".platform-toggle-group .pill-button.active")].map((node) => node.textContent.trim());
+    const payload = {
+      title: document.querySelector("#publish-title")?.value.trim() || video?.title || "Untitled upload",
+      notes: document.querySelector("#publish-notes")?.value.trim(),
+      video,
+      platforms,
+      creator: state.creator,
+      dna: state.dna,
+    };
+    const result = await apiJson("/api/ai/publish-pack", { method: "POST", body: payload });
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Publishing pack failed.");
+      return;
+    }
+    state.publishingJobs.unshift({ id: `publish-${Date.now()}`, createdAt: new Date().toISOString(), ...result.data });
+    saveState();
+    render();
+    toast("Publishing pack created.");
+  });
+}
+
+async function handleUploadYouTube(button) {
+  await withBusy(button, "Preparing...", async () => {
+    const file = document.querySelector("#publish-file")?.files?.[0];
+    if (!file) {
+      toast("Choose a video file first.");
+      return;
+    }
+    if (!state.google?.youtubeUpload) {
+      const result = await apiJson("/api/google/oauth/start?scope=upload", { auth: true });
+      if (result.ok && result.data.authUrl) {
+        location.href = result.data.authUrl;
+        return;
+      }
+      toast(result.data.message || "Connect Google with YouTube upload permission first.");
+      return;
+    }
+    toast("YouTube upload permission is connected. Production upload will use the YouTube resumable upload API.");
+    const job = state.publishingJobs[0] || { id: `publish-${Date.now()}`, title: document.querySelector("#publish-title")?.value.trim() || file.name, platforms: [] };
+    job.youtubeUploadMessage = "YouTube upload permission is connected. Add resumable upload handling for large video files before production posting.";
+    state.publishingJobs = [job, ...state.publishingJobs.filter((item) => item.id !== job.id)];
+    saveState();
+    render();
+  });
+}
+
+async function handleCoachSend(button) {
+  const prompt = document.querySelector("#coach-input")?.value.trim();
+  if (!prompt) return;
+  await handleCoachPrompt(prompt, button);
+}
+
+async function handleCoachPrompt(prompt, button) {
+  state.coachChats.push({ role: "user", text: prompt });
+  await withBusy(button, "Thinking...", async () => {
+    const result = await apiJson("/api/ai/coach", {
+      method: "POST",
+      body: {
+        prompt,
+        creator: state.creator,
+        dna: state.dna,
+        ideas: state.ideas.slice(0, 12),
+        scripts: state.scripts.slice(0, 6),
+        youtube: state.youtube,
+      },
+    });
+    const text = result.ok ? result.data.reply : (result.data.message || "I could not generate a coach response.");
+    state.coachChats.push({ role: "assistant", text });
+    saveState();
+    render();
+  });
+}
+
+async function handleThumbnailChatSend(button) {
+  const prompt = document.querySelector("#thumb-chat-input")?.value.trim();
+  if (!prompt) return;
+  await handleThumbnailSuggestion(prompt, button);
+}
+
+async function handleThumbnailSuggestion(prompt, button) {
+  let chat = activeThumbnailChat();
+  if (!chat) {
+    await generateThumbnailCanvas();
+    chat = activeThumbnailChat();
   }
-  state.tutorialStep = Math.max(0, next);
-  saveState();
-  render();
-}
-
-function finishTutorial() {
-  state.tutorialCompleted = true;
-  state.tutorialStep = 0;
-  saveState();
-  render();
-  toast("Tutorial completed.");
-}
-
-function restartTutorial() {
-  state.tutorialCompleted = false;
-  state.tutorialStep = 0;
-  saveState();
-  render();
+  if (!chat) return;
+  chat.messages = [...normalizeList(chat.messages), { role: "user", text: prompt, createdAt: new Date().toISOString() }];
+  await withBusy(button, "Updating...", async () => {
+    const result = await apiJson("/api/ai/thumbnail-design", {
+      method: "POST",
+      body: {
+        idea: selectedIdea() || { title: chat.title },
+        mainText: chat.title,
+        brief: prompt,
+        previousDesign: chat.design,
+        selection: state.thumbnailSelection,
+        creator: state.creator,
+        dna: state.dna,
+      },
+    });
+    if (!result.ok) {
+      chat.messages.pop();
+      toast(result.data.message || result.data.error || "Gemini thumbnail update failed.");
+      return;
+    }
+    const design = result.data;
+    chat.design = design;
+    chat.messages.push({ role: "assistant", text: design.rationale || "Updated the thumbnail layout.", createdAt: new Date().toISOString() });
+    const canvasNode = document.querySelector("#thumbnail-canvas");
+    if (canvasNode) drawThumbnailDesign(canvasNode, design);
+    saveState();
+    render();
+    requestAnimationFrame(redrawActiveThumbnail);
+  });
 }
 
 async function handleThumbnailCopy(button) {
@@ -3800,23 +4815,88 @@ async function handleThumbnailCopy(button) {
       dna: state.dna,
     };
     const result = await apiJson("/api/ai/thumbnail-copy", { method: "POST", body: payload });
-    const suggestions = result.ok ? normalizeList(result.data.suggestions) : fallbackThumbnailSuggestions(payload.idea?.title || "Creator idea");
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Gemini thumbnail text failed.");
+      return;
+    }
+    const suggestions = normalizeList(result.data.suggestions);
     document.querySelector("#thumbnail-copy-output").innerHTML = `
-      <div class="card-topline"><div><span class="section-kicker">Title options</span><h3>Low-token suggestions</h3></div></div>
+      <div class="card-topline"><div><span class="section-kicker">Title options</span><h3>Gemini suggestions</h3></div></div>
       <div class="list-stack">${suggestions.map((item) => insight(item.text || item, item.reason || "Short, specific, and thumbnail-friendly.")).join("")}</div>
     `;
     toast("Thumbnail text suggested.");
   });
 }
 
-function generateThumbnailCanvas() {
+function redrawActiveThumbnail() {
+  const canvasNode = document.querySelector("#thumbnail-canvas");
+  const chat = activeThumbnailChat();
+  if (!canvasNode || !chat?.design) return;
+  drawThumbnailDesign(canvasNode, chat.design);
+}
+
+async function generateThumbnailCanvas() {
   const canvasNode = document.querySelector("#thumbnail-canvas");
   if (!canvasNode) return;
-  const ctx = canvasNode.getContext("2d");
   const title = document.querySelector("#thumb-title")?.value.trim() || selectedIdea()?.title || "NEW IDEA";
-  const subtitle = document.querySelector("#thumb-subtitle")?.value.trim();
-  const palette = customValue("thumb-palette");
-  const colors = thumbnailPalette(palette);
+  const brief = document.querySelector("#thumb-idea-brief")?.value.trim();
+  const selected = customValue("thumb-idea");
+  const idea = selected === "Custom" ? { title, concept: brief } : state.ideas.find((item) => item.id === selected || item.title === selected) || selectedIdea() || { title, concept: brief };
+  const result = await apiJson("/api/ai/thumbnail-design", {
+    method: "POST",
+    body: {
+      idea,
+      mainText: title,
+      brief,
+      selection: state.thumbnailSelection,
+      creator: state.creator,
+      dna: state.dna,
+    },
+  });
+  if (!result.ok) {
+    toast(result.data.message || result.data.error || "Gemini thumbnail generation failed.");
+    return;
+  }
+  const design = result.data;
+  drawThumbnailDesign(canvasNode, design);
+  const chat = {
+    id: `thumb-chat-${Date.now()}`,
+    title,
+    design,
+    createdAt: new Date().toISOString(),
+    messages: [
+      { role: "assistant", text: design.rationale || "Generated a thumbnail layout from your idea and main text." },
+    ],
+  };
+  state.thumbnailChats.unshift(chat);
+  state.activeThumbnailChatId = chat.id;
+  state.thumbnails.unshift({
+    id: `thumb-${Date.now()}`,
+    title,
+    brief,
+    design,
+    createdAt: new Date().toISOString(),
+  });
+  saveState();
+  document.querySelector("#thumbnail-copy-output").innerHTML = chat.messages.map(chatBubble).join("");
+  toast("Thumbnail generated with Gemini.");
+}
+
+function drawThumbnailDesign(canvasNode, design = {}) {
+  const ctx = canvasNode.getContext("2d");
+  if (design.imageData) {
+    const image = new Image();
+    image.onload = () => {
+      ctx.clearRect(0, 0, 1280, 720);
+      ctx.drawImage(image, 0, 0, 1280, 720);
+      drawThumbnailSelection(ctx);
+    };
+    image.src = `data:${design.imageMimeType || "image/png"};base64,${design.imageData}`;
+    return;
+  }
+  const title = design.mainText || design.title || "NEW IDEA";
+  const subtitle = design.supportText || "";
+  const colors = thumbnailPalette(design.palette || "white teal charcoal");
   ctx.clearRect(0, 0, 1280, 720);
 
   const gradient = ctx.createLinearGradient(0, 0, 1280, 720);
@@ -3826,29 +4906,31 @@ function generateThumbnailCanvas() {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 1280, 720);
 
-  ctx.fillStyle = "rgba(255,255,255,0.08)";
-  for (let x = 0; x < 1280; x += 80) {
-    ctx.fillRect(x, 0, 2, 720);
+  ctx.fillStyle = "rgba(255,255,255,0.055)";
+  for (let x = 0; x < 1280; x += 96) {
+    ctx.fillRect(x, 0, 1, 720);
   }
-  for (let y = 0; y < 720; y += 80) {
-    ctx.fillRect(0, y, 1280, 2);
+  for (let y = 0; y < 720; y += 96) {
+    ctx.fillRect(0, y, 1280, 1);
   }
 
+  const focal = design.focalBox || { x: 780, y: 95, w: 360, h: 500 };
   ctx.fillStyle = colors.accent;
-  ctx.fillRect(860, 80, 300, 520);
-  ctx.fillStyle = "rgba(5,7,6,0.82)";
-  ctx.fillRect(890, 110, 240, 460);
+  ctx.fillRect(focal.x, focal.y, focal.w, focal.h);
+  ctx.fillStyle = "rgba(5,7,6,0.72)";
+  ctx.fillRect(focal.x + 34, focal.y + 34, Math.max(40, focal.w - 68), Math.max(40, focal.h - 68));
   ctx.strokeStyle = colors.accent2;
-  ctx.lineWidth = 8;
-  ctx.strokeRect(890, 110, 240, 460);
+  ctx.lineWidth = 9;
+  ctx.strokeRect(focal.x + 34, focal.y + 34, Math.max(40, focal.w - 68), Math.max(40, focal.h - 68));
 
   ctx.fillStyle = "#f5fbf8";
-  ctx.font = "900 92px Inter, Arial, sans-serif";
-  wrapCanvasText(ctx, title.toUpperCase(), 80, 170, 720, 102);
+  ctx.font = `${design.textWeight || "900"} ${design.textSize || 92}px Inter, Arial, sans-serif`;
+  const textBox = design.textBox || { x: 74, y: 150, w: 720, lineHeight: 98 };
+  wrapCanvasText(ctx, title.toUpperCase(), textBox.x, textBox.y, textBox.w, textBox.lineHeight);
   if (subtitle) {
     ctx.fillStyle = colors.accent2;
     ctx.font = "800 42px Inter, Arial, sans-serif";
-    wrapCanvasText(ctx, subtitle.toUpperCase(), 84, 560, 700, 52);
+    wrapCanvasText(ctx, subtitle.toUpperCase(), textBox.x, 565, textBox.w, 52);
   }
 
   ctx.fillStyle = "#050706";
@@ -3857,15 +4939,17 @@ function generateThumbnailCanvas() {
   ctx.font = "800 28px Inter, Arial, sans-serif";
   ctx.fillText("CONTENTUS DRAFT", 104, 647);
 
-  state.thumbnails.unshift({
-    id: `thumb-${Date.now()}`,
-    title,
-    subtitle,
-    palette,
-    createdAt: new Date().toISOString(),
-  });
-  saveState();
-  toast("Thumbnail generated locally.");
+  drawThumbnailSelection(ctx);
+}
+
+function drawThumbnailSelection(ctx) {
+  if (state.thumbnailSelection?.w > 8 && state.thumbnailSelection?.h > 8) {
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 5;
+    ctx.setLineDash([18, 10]);
+    ctx.strokeRect(state.thumbnailSelection.x, state.thumbnailSelection.y, state.thumbnailSelection.w, state.thumbnailSelection.h);
+    ctx.setLineDash([]);
+  }
 }
 
 function downloadThumbnailPng() {
@@ -3939,6 +5023,88 @@ function selectedVideo() {
   return videos.find((video) => video.id === state.selectedVideoId) || videos[0] || null;
 }
 
+function activeScript() {
+  const chat = activeScriptChat();
+  return state.scripts.find((script) => script.id === chat?.scriptId) || state.scripts[0] || null;
+}
+
+function activeScriptChat() {
+  return normalizeList(state.scriptChats).find((chat) => chat.id === state.activeScriptChatId) || normalizeList(state.scriptChats)[0] || null;
+}
+
+function appendScriptChat(role, text) {
+  let chat = activeScriptChat();
+  if (!chat) {
+    chat = { id: `script-chat-${Date.now()}`, title: activeScript()?.title || "Script chat", scriptId: activeScript()?.id, createdAt: new Date().toISOString(), messages: [] };
+    state.scriptChats.unshift(chat);
+    state.activeScriptChatId = chat.id;
+  }
+  chat.messages = [...normalizeList(chat.messages), { role, text, createdAt: new Date().toISOString() }].slice(-40);
+}
+
+function activeThumbnailChat() {
+  return normalizeList(state.thumbnailChats).find((chat) => chat.id === state.activeThumbnailChatId) || normalizeList(state.thumbnailChats)[0] || null;
+}
+
+function newThumbnailChat() {
+  state.activeThumbnailChatId = "";
+  state.thumbnailSelection = null;
+  saveState();
+  render();
+}
+
+function openThumbnailChat(id) {
+  state.activeThumbnailChatId = id || "";
+  state.thumbnailSelection = null;
+  saveState();
+  render();
+  requestAnimationFrame(redrawActiveThumbnail);
+}
+
+function threadButton(chat, activeId, action) {
+  return `
+    <button class="thread-button ${chat.id === activeId ? "active" : ""}" type="button" data-action="${action}" data-chat-id="${escapeHtml(chat.id)}">
+      <strong>${escapeHtml(chat.title || "Untitled")}</strong>
+      <small>${escapeHtml(formatDate(chat.createdAt || ""))}</small>
+    </button>
+  `;
+}
+
+function chatBubble(message) {
+  return `<div class="chat-bubble ${message.role === "user" ? "user" : "assistant"}"><span>${escapeHtml(message.role || "assistant")}</span><p>${escapeHtml(message.text || "")}</p></div>`;
+}
+
+function detailedVideoReportFor(videoId) {
+  return normalizeList(state.detailedVideoReports).find((report) => report.videoId === videoId);
+}
+
+function publishingSourceOptions() {
+  const videos = normalizeList(state.youtube?.videos || state.youtube?.recentVideos);
+  return [{ value: "Custom", label: "Upload custom video" }, ...videos.map((video) => ({ value: video.id, label: video.title || "Untitled video" }))];
+}
+
+function shortTitle(title = "") {
+  const clean = String(title || "").trim();
+  return clean.length > 28 ? `${clean.slice(0, 25)}...` : clean;
+}
+
+function wordCount(text = "") {
+  return String(text).trim().split(/\s+/).filter(Boolean).length;
+}
+
+function miniSparklineSvg(values = []) {
+  const nums = normalizeList(values).map(Number).filter(Number.isFinite);
+  if (nums.length < 2) return "";
+  const max = Math.max(...nums, 1);
+  const min = Math.min(...nums, 0);
+  const points = nums.map((value, index) => {
+    const x = (index / Math.max(1, nums.length - 1)) * 100;
+    const y = 40 - ((value - min) / Math.max(1, max - min)) * 34;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  return `<svg viewBox="0 0 100 42" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
 function videoTitleFor(videoId) {
   const videos = normalizeList(state.youtube?.videos || state.youtube?.recentVideos);
   return videos.find((video) => video.id === videoId)?.title || "Selected video";
@@ -3965,6 +5131,7 @@ function googlePublicClientState(meta = {}) {
   return {
     calendar: Boolean(meta.calendar || meta.calendarConnected || meta.capabilities?.calendar),
     youtubePosting: Boolean(meta.youtubePosting || meta.capabilities?.youtube),
+    youtubeUpload: Boolean(meta.youtubeUpload || meta.capabilities?.upload),
     reconnectRequired: Boolean(meta.reconnectRequired || meta.reconnect_required),
     expiresAt: meta.expiresAt || meta.expires_at,
   };
@@ -4221,6 +5388,22 @@ function thumbnailPalette(value = "") {
   return { bg1: "#061b1f", bg2: "#190c0b", accent: "#5ee8f2", accent2: "#ff7567" };
 }
 
+function fallbackThumbnailDesign(body = {}) {
+  const mainText = body.mainText || body.idea?.title || "BIG IDEA";
+  const short = String(mainText).split(/\s+/).slice(0, 5).join(" ");
+  return {
+    title: short,
+    mainText: short,
+    supportText: body.brief ? "REAL TAKE" : "",
+    palette: "white teal charcoal",
+    textSize: short.length > 22 ? 72 : 92,
+    textWeight: "900",
+    textBox: { x: 76, y: 150, w: 690, lineHeight: short.length > 22 ? 82 : 100 },
+    focalBox: { x: 820, y: 95, w: 340, h: 500 },
+    rationale: "Generated a clean high-contrast thumbnail draft with short readable text and one clear focal area.",
+  };
+}
+
 function fallbackThumbnailSuggestions(title) {
   return [
     { text: title.slice(0, 32) || "I Tested This", reason: "Keeps the exact idea clear." },
@@ -4311,3 +5494,343 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+/* --- Contentus polished dashboard UI override generated for the uploaded app.js. --- */
+function appShellV4(route) {
+  const page = pageForRouteV4(route);
+  return `
+    <section class="app-shell app-v4 pro-app-shell contentus-pro-shell">
+      <aside class="sidebar sidebar-v4 contentus-sidebar">
+        <a class="ct-brand-lockup" href="#/app/dashboard" aria-label="Contentus dashboard">
+          ${dnaLogo(false)}
+          <span>Contentus</span>
+        </a>
+        <nav class="sidebar-nav ct-nav" aria-label="App navigation">
+          ${navLink("/app/dashboard", "dashboard", "Dashboard")}
+          ${navLink("/app/ideas", "spark", "Ideas")}
+          ${navLink("/app/idea-hit-miss", "guard", "Idea Hit / Miss")}
+          ${navLink("/app/scripts", "script", "Scripts")}
+          ${navLink("/app/thumbnail", "film", "Thumbnails")}
+          ${navLink("/app/trends", "chart", "Trend Analyzer")}
+          ${navLink("/app/youtube-growth", "chart", "Analytics")}
+          ${navLink("/app/detailed-video-analysis", "chart", "Detailed Analysis")}
+          ${navLink("/app/community", "spark", "Comments")}
+          ${navLink("/app/calendar", "calendar", "Content Calendar")}
+          ${navLink("/app/video-checker", "guard", "Video Checker")}
+          ${navLink("/app/publishing", "spark", "Publish Everywhere")}
+          ${navLink("/app/inspiration", "spark", "Inspiration")}
+          ${navLink("/app/dna", "dna", "Brand Voice")}
+          ${navLink("/app/coach", "spark", "AI Coach")}
+          ${navLink("/app/settings", "settings", "Settings")}
+        </nav>
+        
+      </aside>
+
+      <section class="app-main contentus-main">
+        <header class="app-topbar topbar-v4 ct-topbar">
+          <div class="topbar-left">
+            <button class="icon-button mobile-menu" data-action="mobile-menu" type="button" aria-label="Open menu">${icon("menu")}</button>
+          </div>
+          <div class="topbar-actions ct-top-actions">
+            <span class="status-dot ${appConfig?.integrations?.gemini ? "good" : "warn"}">${appConfig?.integrations?.gemini ? "Gemini ready" : "Demo mode"}</span>
+            <button class="ct-icon-button" type="button" aria-label="Notifications">🔔<sup>3</sup></button>
+            <button class="ct-icon-button" type="button" aria-label="Theme">☼</button>
+            <span class="ct-avatar">${escapeHtml((creatorDisplayNameV4?.() || creatorDisplayName() || "C").slice(0, 1).toUpperCase())}</span>
+            <a class="button primary ct-new-idea-btn" href="#/app/ideas">New idea</a>
+          </div>
+        </header>
+        <div class="app-content ct-app-content">${page.html}</div>
+      </section>
+    </section>
+  `;
+}
+
+function pageForRouteV4(route) {
+  const pages = {
+    "/app/dashboard": { title: "Dashboard", subtitle: "Your AI-powered content command center.", html: dashboardPageV4() },
+    "/app/ideas": { title: "Ideas", subtitle: "Generate content ideas in your voice.", html: ideasPageV4() },
+    "/app/idea-hit-miss": { title: "Idea Hit / Miss", subtitle: "Validate ideas against platform momentum.", html: ideaHitMissPageV4() },
+    "/app/scripts": { title: "Script Builder", subtitle: "Write real speaking scripts with AI assistance.", html: scriptsPageV4() },
+    "/app/thumbnail": { title: "Thumbnail Designer", subtitle: "Generate and refine high-CTR thumbnails.", html: thumbnailPageV4() },
+    "/app/trends": { title: "Trend Analyzer", subtitle: "See famous music, winning ideas, and content opportunities.", html: trendAnalyzerPageV4() },
+    "/app/youtube-growth": { title: "Analytics Overview", subtitle: "Track performance and growth trends.", html: youtubeGrowthPageV4() },
+    "/app/detailed-video-analysis": { title: "Detailed Video Analysis", subtitle: "Understand what to improve in a selected video.", html: detailedVideoAnalysisPageV4() },
+    "/app/community": { title: "Community & Comments", subtitle: "Turn conversations into content.", html: communityPageV4() },
+    "/app/calendar": { title: "Content Calendar", subtitle: "Plan smarter and avoid creator burnout.", html: calendarPageV4() },
+    "/app/video-checker": { title: "Video Checker", subtitle: "Score audio, visuals, title, thumbnail, and audience fit.", html: videoCheckerPageV4() },
+    "/app/publishing": { title: "Publish Everywhere", subtitle: "Upload once. Adapt intelligently. Publish everywhere.", html: publishingPageV4() },
+    "/app/inspiration": { title: "Inspiration Library", subtitle: "Save references without copying.", html: inspirationPageV4() },
+    "/app/dna": { title: "Brand Voice", subtitle: "Define what makes your content sound like you.", html: dnaPageV4() },
+    "/app/coach": { title: "AI Channel Coach", subtitle: "Ask what to improve and what to post next.", html: coachPageV4() },
+    "/app/settings": { title: "Settings", subtitle: "Manage integrations and privacy.", html: (typeof settingsPageV4 === "function" ? settingsPageV4() : settingsPage()) },
+    "/app/extension": { title: "Chrome Helper", subtitle: "Use Contentus while browsing.", html: extensionPageV4() },
+  };
+  return pages[route] || pages["/app/dashboard"];
+}
+
+function ctMockVideos() {
+  return normalizeList(state.youtube?.videos || state.youtube?.recentVideos).length
+    ? normalizeList(state.youtube?.videos || state.youtube?.recentVideos)
+    : [
+      { id: "mock-1", title: "10 AI Tools for Creators in 2024", views: 128000, likes: 6200, comments: 432, duration: "12:45", ctr: 6.4, retention: 54, watchTime: "8.2K", topic: "AI / Productivity", platform: "YouTube" },
+      { id: "mock-2", title: "How I Plan My Content in 30 Minutes", views: 18300, likes: 1200, comments: 119, duration: "8:21", ctr: 5.9, retention: 49, watchTime: "1.2K", topic: "Creator Systems", platform: "YouTube" },
+      { id: "mock-3", title: "3 ChatGPT Hacks You Need to Try", views: 15700, likes: 970, comments: 82, duration: "0:44", ctr: 7.2, retention: 61, watchTime: "820", topic: "Shorts", platform: "YouTube Shorts" },
+      { id: "mock-4", title: "Day in the Life: Full-Time Creator", views: 12800, likes: 880, comments: 64, duration: "0:58", ctr: 5.1, retention: 42, watchTime: "620", topic: "Lifestyle", platform: "Instagram Reels" },
+    ];
+}
+
+function ctTrendingTopics() {
+  return [
+    { title: "AI Tools for Creators in 2024", niche: "AI / Tools", score: 98, icon: "▶" },
+    { title: "How I Grew from 0 to 100K Subs", niche: "YouTube Growth", score: 86, icon: "📈" },
+    { title: "Making Money with AI", niche: "Creator Economy", score: 82, icon: "💸" },
+    { title: "Day in the Life: Creator Edition", niche: "Lifestyle", score: 74, icon: "🎥" },
+    { title: "Faceless YouTube Channel Ideas", niche: "Faceless", score: 69, icon: "🎭" },
+  ];
+}
+
+function ctTrendingAudio() {
+  return [
+    { title: "UPBEAT SUCCESS", duration: "2:31", usage: "128K", platforms: "▶ ♪ ◎ 𝕏" },
+    { title: "Cinematic Motivation", duration: "1:58", usage: "96K", platforms: "▶ ♪ ◎" },
+    { title: "Future Bass Energy", duration: "1:44", usage: "82K", platforms: "▶ ♪ ◎" },
+    { title: "Glitch Transition", duration: "0:15", usage: "71K", platforms: "♪ ◎ 𝕏" },
+    { title: "Chill Lo-Fi Vibes", duration: "2:07", usage: "63K", platforms: "▶ ♪ ◎" },
+  ];
+}
+
+function ctMetricCard(label, value, sub, tone = "green") {
+  return `
+    <article class="ct-card ct-metric ct-${tone}">
+      <div class="ct-card-label">${escapeHtml(label)} <span>ⓘ</span></div>
+      <div class="ct-metric-value"><strong>${escapeHtml(value)}</strong><small>/100</small></div>
+      <p>${escapeHtml(sub)}</p>
+      <div class="ct-mini-line">${ctMiniSvg(tone)}</div>
+    </article>
+  `;
+}
+
+function ctRing(label, value, sub = "Excellent", size = "normal") {
+  return `
+    <article class="ct-card ct-ring-card ${size === "large" ? "ct-ring-card-large" : ""}">
+      <div class="ct-card-label">${escapeHtml(label)} <span>ⓘ</span></div>
+      <div class="ct-ring" style="--score:${Number(value)}"><strong>${escapeHtml(value)}</strong><small>/100</small></div>
+      <p>${escapeHtml(sub)}</p>
+    </article>
+  `;
+}
+
+function ctMiniSvg(tone = "green") {
+  const color = tone === "purple" ? "#a855f7" : tone === "blue" ? "#22c7ff" : tone === "orange" ? "#f59e0b" : "#22e284";
+  return `<svg viewBox="0 0 130 36" aria-hidden="true"><polyline points="3,29 15,20 27,23 40,14 52,17 66,9 79,12 94,6 108,11 127,3" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+function ctWave() {
+  return `<svg viewBox="0 0 110 28" aria-hidden="true">${Array.from({ length: 25 }).map((_, i) => `<rect x="${i * 4.2}" y="${14 - ([5,12,18,9,22,13,7,17,24,10][i % 10] / 2)}" width="2.2" height="${[5,12,18,9,22,13,7,17,24,10][i % 10]}" rx="1" fill="#a855f7" opacity="${0.45 + (i % 4) * 0.12}"/>`).join("")}</svg>`;
+}
+
+function ctLineChart() {
+  return `
+    <svg viewBox="0 0 680 260" preserveAspectRatio="none" aria-hidden="true">
+      <defs><linearGradient id="ctArea" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stop-color="#3b82f6" stop-opacity="0.45"/><stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/></linearGradient></defs>
+      <g stroke="#ffffff" opacity=".12"><line x1="0" y1="50" x2="680" y2="50"/><line x1="0" y1="105" x2="680" y2="105"/><line x1="0" y1="160" x2="680" y2="160"/><line x1="0" y1="215" x2="680" y2="215"/></g>
+      <path d="M0,210 C45,165 82,178 118,138 C160,92 184,144 220,128 C264,108 292,58 336,92 C380,126 398,62 450,78 C500,94 520,130 572,72 C618,24 640,70 680,34 L680,260 L0,260 Z" fill="url(#ctArea)"/>
+      <path d="M0,210 C45,165 82,178 118,138 C160,92 184,144 220,128 C264,108 292,58 336,92 C380,126 398,62 450,78 C500,94 520,130 572,72 C618,24 640,70 680,34" fill="none" stroke="#38bdf8" stroke-width="4" stroke-linecap="round"/>
+    </svg>
+  `;
+}
+
+function ctDonut() {
+  return `<div class="ct-donut"><span>128K</span><small>Views</small></div>`;
+}
+
+function ctVideoThumb(label = "10 AI TOOLS", badge = "12:45") {
+  return `<div class="ct-video-thumb"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(badge)}</span></div>`;
+}
+
+function dashboardPageV4() {
+  return `
+    <section class="page page-v4 ct-page ct-dashboard-page">
+      <div class="ct-page-heading">
+        <div><h2>Welcome back, Creator! 👋</h2><p>Run your smarter, AI-powered content studio.</p></div>
+      </div>
+      <div class="ct-dashboard-grid">
+        <article class="ct-card ct-health-card"><h3>Channel Health <span>ⓘ</span></h3><div class="ct-health-inner"><div class="ct-ring big" style="--score:87"><strong>87</strong><small>/100</small></div><div><strong class="ct-good">Strong growth</strong><p>Great momentum! Keep building consistently.</p><a class="ct-soft-btn" href="#/app/detailed-video-analysis">View Full Report</a></div></div></article>
+        <article class="ct-card ct-auth-card"><h3>Authenticity Score <span>ⓘ</span></h3><div class="ct-ring" style="--score:92"><strong>92</strong><small>/100</small></div><strong class="ct-good center">Very Authentic</strong><p>Your content feels real and connects with your audience.</p></article>
+        <article class="ct-card ct-trend-preview"><div class="ct-card-top"><h3>Trend Analyzer <span>ⓘ</span></h3><a href="#/app/trends">View All Trends →</a></div><div class="ct-two-col">${ctTrendMiniList("YouTube Long Videos", ctTrendingTopics().slice(0,3))}${ctTrendMiniList("YouTube Shorts", [{title:"AI Before vs After", score:97},{title:"3 ChatGPT Hacks", score:89},{title:"Day in the Life: Creator", score:74}])}</div><div class="ct-audio-strip"><strong>Trending Audio Across Platforms</strong><span>▶ YouTube ${ctMiniSvg("green")}</span><span>♪ TikTok ${ctMiniSvg("green")}</span><span>◎ Instagram ${ctMiniSvg("green")}</span></div></article>
+        <article class="ct-card ct-quick-actions"><h3>Quick Actions</h3><div class="ct-action-grid">${ctActionTile("/app/scripts","📝","Script Builder","Write powerful scripts")}${ctActionTile("/app/thumbnail","🖼️","Thumbnail Designer","Create scroll-stopping thumbs")}${ctActionTile("/app/video-checker","🎬","Video Checker","Optimize before publish")}${ctActionTile("/app/idea-hit-miss","🎯","Idea Hit / Miss","Validate ideas with AI")}${ctActionTile("/app/trends","📈","Trend Analyzer","Find winning trends")}${ctActionTile("/app/publishing","🚀","Publish Everywhere","Post across platforms")}</div></article>
+        <article class="ct-card ct-ai-strategist"><div class="ct-card-top"><h3>AI Strategist</h3><span class="ct-badge purple">Beta</span></div><div class="ct-ai-bubble"><div class="ct-bot-face">☻</div><p>Hi Creator! 👋 I'm your AI strategist. Ask me anything about improving your channel.</p></div><button>What should I improve next?</button><button>Why did my last video underperform?</button><button>Give me ideas for next week</button><div class="ct-chat-input">Ask me anything... <span>➤</span></div></article>
+        <article class="ct-card ct-platform-status"><h3>Cross-Platform Status <span>ⓘ</span></h3>${["YouTube Long Videos","YouTube Shorts","TikTok","Instagram","X / Twitter"].map((p,i)=>`<div class="ct-platform-row"><strong>${["▶","⚡","♪","◎","𝕏"][i]} ${p}</strong><small>${["128K subscribers","312K subscribers","86K followers","52K followers","18K followers"][i]}</small><span>${ctMiniSvg("purple")}</span><em>+${[18,26,14,9,7][i]}%</em></div>`).join("")}</article>
+        <article class="ct-card ct-opportunity"><div class="ct-card-top"><h3>Opportunity Radar <span>ⓘ</span></h3><a href="#/trends">View All →</a></div>${["Create a video about AI tools for creators","Shorts about 3 ChatGPT hacks are trending","Long-form content gap in your niche","Collaborate with creators in your niche"].map((x,i)=>`<div class="ct-opportunity-row"><span>${["◎","⚡","☷","👥"][i]}</span><strong>${escapeHtml(x)}</strong><em>${i<2?"High":"Medium"}</em><b>↑ Potential</b></div>`).join("")}</article>
+        <article class="ct-card ct-mini-calendar"><div class="ct-card-top"><h3>Content Calendar <span>ⓘ</span></h3><a href="#/app/calendar">View Calendar →</a></div><div class="ct-week-row">${["Mon 20","Tue 21","Wed 22","Thu 23","Fri 24","Sat 25","Sun 26"].map((d,i)=>`<span class="${i===2?"active":""}">${d}</span>`).join("")}</div>${["How I Use AI to Save 10+ Hours a Week","3 ChatGPT Hacks You Need to Try","Day in the Life: Full-Time Creator"].map((x,i)=>`<div class="ct-schedule-row"><time>${["10:00 AM","01:00 PM","06:00 PM"][i]}</time><strong>${x}</strong><span>${["Script Ready","Thumbnail","In Progress"][i]}</span></div>`).join("")}</article>
+        <article class="ct-card ct-privacy-hero"><div class="ct-shield">🛡️</div><h3>Privacy-First</h3><p>Your data stays yours. We don't train on your content. No data shared. Ever.</p><div class="ct-lock-pill">🔒 No data shared</div></article>
+      </div>
+    </section>
+  `;
+}
+
+function ctActionTile(route, emoji, title, text) {
+  return `<a class="ct-action-tile" href="#${route}"><span>${emoji}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(text)}</small><b>›</b></a>`;
+}
+
+function ctTrendMiniList(title, items) {
+  return `<div class="ct-trend-mini"><h4>${escapeHtml(title)}</h4>${items.map((item,i)=>`<div><span>${i+1}</span><strong>${escapeHtml(item.title)}</strong><em>🔥 ${item.score}</em></div>`).join("")}<button type="button">View all trends</button></div>`;
+}
+
+function trendAnalyzerPageV4() {
+  return `
+    <section class="page page-v4 ct-page ct-trend-page">
+      <div class="ct-page-heading"><div><h2>Trend Analyzer <span class="ct-zig">⌁⌁⌁</span></h2><p>See the hottest music, video ideas, and content opportunities right now.</p></div></div>
+      <div class="ct-platform-tabs">${["▶ YouTube Long","⚡ YouTube Shorts","♪ TikTok","◎ Instagram Reels","𝕏 X / Twitter"].map((x,i)=>`<button class="${i===0?"active":""}" type="button">${x}</button>`).join("")}<div class="ct-tab-spacer"></div><button>🌍 Worldwide</button><button>📅 Last 7 Days</button></div>
+      <div class="ct-trend-score-row">${ctMetricCard("Trend Velocity","85","Very High","green")}${ctMetricCard("Search Demand","91","Very High","purple")}${ctMetricCard("Audience Interest","88","Very High","blue")}${ctMetricCard("Competition Score","42","Medium","orange")}${ctRing("Opportunity Score","88","Excellent")}</div>
+      <div class="ct-trend-layout">
+        <div class="ct-trend-main">
+          <article class="ct-card"><div class="ct-card-top"><h3>🎵 Most Famous Music</h3><a>View all audio →</a></div><div class="ct-audio-table"><div class="ct-table-head"><span>#</span><span>Track</span><span>Duration</span><span>Usage</span><span>Platforms</span></div>${ctTrendingAudio().map((a,i)=>`<div class="ct-audio-row"><span>${i+1}</span><button>▶</button><strong>${a.title}<small>${ctWave()}</small></strong><em>${a.duration}</em><b>${a.usage}</b><i>${a.platforms}</i></div>`).join("")}</div></article>
+          <article class="ct-card"><div class="ct-card-top"><h3>💡 Best Video Ideas</h3><a>View all ideas →</a></div><div class="ct-idea-table"><div class="ct-table-head"><span>#</span><span>Idea</span><span>Niche</span><span>Trend Score</span></div>${ctTrendingTopics().map((t,i)=>`<div class="ct-idea-row"><span>${i+1}</span><strong>${escapeHtml(t.title)}</strong><em>${escapeHtml(t.niche)}</em><b>${ctMiniSvg(i===0?"green":"purple")}🔥 ${t.score}</b></div>`).join("")}</div></article>
+          <article class="ct-card ct-topic-chart"><div class="ct-card-top"><h3>Topic Momentum</h3><button>Last 7 Days</button></div>${ctLineChart()}</article>
+          <article class="ct-card ct-heatmap-card"><h3>Platform Heatmap</h3><div class="ct-heatmap">${["YouTube Long","YouTube Shorts","TikTok","Instagram Reels","X / Twitter"].map(row=>`<div><span>${row}</span><p>${Array.from({length:9}).map((_,i)=>`<i style="opacity:${0.18 + i*0.09}"></i>`).join("")}</p></div>`).join("")}</div></article>
+        </div>
+        <aside class="ct-trend-side">
+          <article class="ct-card ct-ai-insight"><div class="ct-card-top"><h3>✨ AI Trend Insight</h3><span class="ct-badge good">● Live</span></div><div class="ct-bot-note"><span>🤖</span><p>Creators are leaning into practical AI tools, faceless growth stories, and productivity hacks. High search demand and rising engagement across YouTube & TikTok.</p></div><h4>Why this trend is hot</h4><ul><li>Search intention ↑ 86% across platforms</li><li>High retention on how-to & tool content</li><li>Growing creator interest in AI workflows</li><li>Low competition window for new ideas</li></ul><h4>Content Suggestions</h4>${["Top 5 AI Tools I Use Everyday","I Tried 10 Viral Productivity Hacks","How I Edit 10x Faster With AI","Build a Faceless Channel Step-by-Step"].map(x=>`<button class="ct-suggestion">${x} →</button>`).join("")}<button class="button primary full-width">Turn into Idea ✨</button></article>
+          <article class="ct-card ct-recommended"><div class="ct-card-top"><h3>Recommended Angles</h3><a>View all →</a></div><div class="ct-angle-mini-grid">${["AI Tools That Save 10+ Hours","0 to 100K Subscribers","Day in the Life Creator","Faceless Ideas That Work"].map((x,i)=>`<div><span>${["🤖","🚀","📸","🎭"][i]}</span><strong>${x}</strong><small>${i===3?"Medium":"High"} Potential</small></div>`).join("")}</div></article>
+        </aside>
+      </div>
+    </section>
+  `;
+}
+
+function ideaHitMissPageV4() {
+  return `
+    <section class="page page-v4 ct-page ct-hit-page">
+      <div class="ct-page-heading"><div><span class="ct-breadcrumb">Ideas › Idea Hit / Miss</span><h2>Idea Hit / Miss</h2></div><button class="ct-soft-btn">↻ Reanalyze</button></div>
+      <div class="ct-hit-layout">
+        <aside class="ct-card ct-idea-input"><h3><span>1</span> Idea Input</h3><label>Paste your idea or upload a brief</label><textarea id="hit-miss-idea">I want to make a video about testing viral TikTok productivity hacks to see if they actually work.</textarea><small>90 / 1000</small><div class="ct-chip-row"><button>Gaming</button><button>Tech</button><button>Finance</button><button>Lifestyle</button></div><div class="ct-upload-box">⇧<p>Drag & drop a file here,<br>or click to upload</p><small>PDF, DOCX, TXT</small></div><button class="button primary full-width" type="button">Analyze Idea ✨</button></aside>
+        <section class="ct-hit-results"><article class="ct-card ct-hit-main"><div><div class="ct-hit-orb"><strong>HIT</strong><span>High Potential</span></div></div><div><h3>Great potential! This idea aligns well with what's trending and what audiences want to watch right now.</h3><button class="ct-soft-btn">View Full Analysis →</button></div><div>${ctRing("Trend Alignment Score","82","Strong alignment")}</div></article><div class="ct-four-metrics">${ctRing("Topic Freshness","76","Fresh")}${ctRing("Audience Demand","84","High")}${ctRing("Competition","58","Moderate")}${ctRing("Overall Score","82","Very Good")}</div><article class="ct-card"><h3><span>3</span> How to make it stronger</h3>${["Add a strong hook in the first 5 seconds","Narrow the focus","Show real before/after results","Include a final list or ranking"].map((x,i)=>`<div class="ct-fix-row"><span>${["💎","▣","✦","👥"][i]}</span><strong>${x}</strong><small>${["Use a surprising result or bold claim to stop the scroll.","Pick 5–7 specific hacks instead of many.","Visual proof drives retention and trust.","Helps with retention and gives viewers a takeaway."][i]}</small></div>`).join("")}<button class="ct-soft-btn full-width">Regenerate Suggestions ✨</button></article><article class="ct-card"><div class="ct-card-top"><h3><span>4</span> Trend References</h3><a href="#/app/trends">View all trends →</a></div><div class="ct-two-col">${ctTrendMiniList("Relevant YouTube Long Trends", [{title:"Testing Viral TikTok Life Hacks",score:98},{title:"I Tested 10 Viral Productivity Hacks",score:86},{title:"Viral Productivity Hacks: Worth It?",score:74}])}${ctTrendMiniList("Relevant YouTube Shorts Trends", [{title:"Productivity Hack That Actually Works",score:97},{title:"3 Productivity Hacks in 30 Seconds",score:89},{title:"TikTok Hack vs Reality",score:76}])}</div><div class="ct-tag-row">${["productivity hacks","tiktok hacks","life hacks","study hacks","focus tips"].map(x=>`<span>${x}</span>`).join("")}</div></article></section>
+      </div>
+    </section>`;
+}
+
+function scriptsPageV4() {
+  const latest = activeScript?.() || state.scripts?.[0];
+  const title = latest?.title || "How I Grew from 0 to 10K Subscribers";
+  return `
+    <section class="page page-v4 ct-page ct-script-page">
+      <div class="ct-workspace-title"><div><button class="ct-round-btn">‹</button><h2>Script Builder</h2><p>Write length-aware scripts and export formatted PDFs.</p></div><div><span class="status-dot good">All changes saved</span><button class="ct-soft-btn">Help</button><button class="button primary" type="button" data-action="v4-download-script">Export PDF</button></div></div>
+      <div class="ct-script-layout">
+        <aside class="ct-card ct-chat-rail"><div class="ct-card-top"><h3>Saved Chats</h3><button>«</button></div><button class="button primary full-width" type="button" data-action="v4-new-script-chat">+ New Chat</button><div class="ct-search-box">🔍 Search chats...</div>${["How I Grew from 0 to 10K Subs","AI Tools for Creators in 2024","3 ChatGPT Hacks You Need","Day in the Life: Creator","Making Money with AI"].map((x,i)=>`<button class="ct-thread ${i===0?"active":""}" type="button"><span>💬</span><strong>${x}</strong><small>${i===0?"Just now":i<3?"Yesterday":`${i+1} days ago`}</small></button>`).join("")}<button class="ct-soft-btn full-width">⚙ Manage Chats</button></aside>
+        <main class="ct-card ct-script-doc"><div class="ct-doc-head"><h3>${escapeHtml(title)} <span>✎</span></h3><small>Word count: 1,248</small><button class="ct-platform-pill">▶ YouTube Long⌄</button></div><div class="ct-editor-toolbar"><button>Heading 1⌄</button><b>B</b><i>I</i><u>U</u><span>☷</span><span>☰</span><span>🔗</span><span>❝</span><span>{ }</span><span>↶</span><span>↷</span></div>${ctScriptDocument()}<div class="ct-doc-footer"><span class="ct-good">● Auto-saved</span><span>Just now</span><span>1,248 words</span><span>~7:45 min read</span></div></main>
+        <aside class="ct-card ct-ai-panel"><div class="ct-card-top"><h3>AI Assistant <span class="ct-badge purple">Beta</span></h3><button>»</button></div><div class="ct-ai-bubble"><div class="ct-bot-face">☻</div><p>Hi Creator! 👋 I'm your AI writing assistant. How can I help improve your script today?</p></div><div class="ct-tool-row"><button data-action="v4-run-script-credibility">🛡 Credibility Check</button><button data-action="v4-script-assistant-suggest" data-prompt="Get suggestions">✨ Get Suggestions</button><button data-action="v4-transform-script" data-transform="Shorter Script">✂ Shorter Script</button></div><div class="ct-message user">Can you give me suggestions to make this more engaging?<span>10:30 AM ✓</span></div><div class="ct-message bot">Absolutely! Here are a few ways to boost engagement and retention.</div>${["Stronger Hook|Make the hook even more specific and curiosity-driven.","Add Pattern Interrupts|Add visual or narrative breaks every 60–90 seconds.","More Personal Moments|Add a short personal story in the proof section."].map((x,i)=>{const [a,b]=x.split("|");return `<div class="ct-suggestion-card tone-${i}"><strong>${a}</strong><p>${b}</p><button data-action="v4-implement-script-suggestion" data-index="${i}">Apply this change</button></div>`}).join("")}<div class="ct-chat-input">Ask anything about your script... <span>➤</span></div><small class="ct-ai-warning">AI can make mistakes. Review before applying.</small></aside>
+      </div>
+      ${state.scriptCredibilityReport ? scriptCredibilityPanel(state.scriptCredibilityReport) : ""}
+    </section>`;
+}
+
+function ctScriptDocument() {
+  const sections = [
+    ["🪝", "Hook", "I went from 0 to 10,000 subscribers in 8 months. No viral videos. No expensive gear. Just a simple system that actually works. Here's exactly how I did it."],
+    ["👤", "Intro", "Hey, I'm [Your Name], a full-time creator focused on helping you build an audience and grow online. If you're new here, consider subscribing—I share practical strategies every week that actually move the needle."],
+    ["✅", "Key Points", "1. I picked a focused niche I'm passionate about\n2. I created content that solves one problem really well\n3. I stayed consistent and treated it like a system\n4. I optimized titles, thumbnails, and hooks\n5. I engaged with my audience and built real relationships"],
+    ["⭐", "Proof / Examples", "Month 1: 23 subscribers\nMonth 4: 1,250 subscribers\nMonth 8: 10,000 subscribers\nOne video on AI Tools for Creators brought in 2,300 subs in a week. Consistency + compounding = growth."],
+    ["🎙", "Speaking Notes", "Be authentic and conversational. Share real examples. Look into the camera. Smile. Keep energy up in the hook and key points."],
+    ["▷", "Outro", "It's not about going viral. It's about adding value and showing up consistently. Keep going. You've got this."],
+    ["♡", "CTA", "If this helped you, hit that like button and subscribe for more strategies that help you grow faster. What's your biggest challenge right now? Drop it in the comments—I read every single one."],
+  ];
+  return `<div class="ct-script-sections">${sections.map(([icon,title,text])=>`<section><h4><span>${icon}</span>${title}</h4><p>${escapeHtml(text).replace(/\n/g,"<br>")}</p></section>`).join("")}</div>`;
+}
+
+function thumbnailPageV4() {
+  const chat = activeThumbnailChat?.();
+  return `
+    <section class="page page-v4 ct-page ct-thumb-page">
+      <div class="ct-workspace-title"><div><h2>Thumbnail Designer</h2><p>Design AI-powered thumbnails that get more clicks.</p></div><div><span class="status-dot good">Auto-save</span><button class="ct-soft-btn">ⓘ Help</button><button class="button primary" data-action="v4-new-thumbnail-chat">↓ New idea</button></div></div>
+      <div class="ct-thumb-layout">
+        <aside class="ct-card ct-thumb-chat"><div class="ct-card-top"><h3>Thumbnail Chat</h3><span class="ct-good">☑ Saved</span></div><form id="thumbnail-form" class="ct-thumb-form">${selectCustom("thumb-idea", "Idea", ideaOptions(), state.selectedIdeaId || "Custom")}${fieldV4("thumb-title", "Main Text", selectedIdea?.()?.title || "10X FASTER WITH AI", "text", "Example: 10X FASTER WITH AI")}${textareaV4("thumb-idea-brief", "Type your thumbnail idea", "Create a high-energy thumbnail for a YouTube video about AI tools that 10x productivity in 2024.", "Describe emotion, person, objects, contrast, and style.", "full")}<button class="button primary full-width" type="button" data-action="v4-generate-thumbnail">Generate thumbnail</button></form><div class="ct-message user">Create a high-energy thumbnail for AI productivity tools.<span>10:32 AM</span></div><div class="ct-message bot">Got it! I'll create a bold thumbnail with high contrast, clear text, and an excited focal point.</div><div id="thumbnail-copy-output" class="ct-thumb-output">${chat?.messages?.length ? chat.messages.map(chatBubble).join("") : `<div class="ct-thumb-mini-preview"><strong>10X</strong><span>FASTER WITH AI</span></div><p>Here's a thumbnail concept based on your idea. You can refine the text, style, or focus areas.</p>`}</div><div class="ct-chat-input">Ask AI to refine your thumbnail... <span data-action="v4-thumbnail-chat-send">➤</span></div><div class="ct-update-list"><h4>Update Suggestions <span>AI</span></h4>${["Make the text bigger","Add more contrast","Show excitement on face","Add productivity icons"].map(x=>`<button type="button" data-action="v4-thumbnail-suggest" data-prompt="${escapeHtml(x)}">${x} →</button>`).join("")}</div></aside>
+        <main class="ct-card ct-thumb-canvas-area"><div class="ct-card-top"><div><span class="section-kicker">AI is generating your thumbnail...</span><div class="ct-progress"><span style="width:72%"></span></div></div><button class="ct-soft-btn" data-action="v4-generate-thumbnail">↻ Regenerate</button></div><div class="ct-thumbnail-preview"><canvas id="thumbnail-canvas" width="1280" height="720" aria-label="Generated thumbnail preview"></canvas><div class="ct-select-tools"><button class="active">Select</button><button>Box Select</button></div></div><p class="ct-canvas-help">ⓘ Drag the handles to resize or move the selected region</p><div class="ct-canvas-actions"><button>−</button><span>100%</span><button>+</button><button>Fit</button><button class="button primary" data-action="v4-download-thumbnail">↓ Download</button><button class="ct-soft-btn">Share</button></div></main>
+      </div>
+    </section>`;
+}
+
+function communityPageV4() {
+  const rows = [
+    ["Sarah J.", "This video really helped me understand the algorithm. My channel grew 30% after I applied these tips. Thank you!", "Positive", "YouTube", "2 hours ago", 24],
+    ["James T.", "What camera do you recommend for beginners on a budget?", "Question", "TikTok", "3 hours ago", 9],
+    ["Lily Carter", "Love your editing style! How do you stay so consistent with uploads?", "Positive", "YouTube", "4 hours ago", 15],
+    ["CoolGuy23", "This is clickbait. None of this works anymore.", "Negative", "YouTube", "5 hours ago", 1],
+    ["Alex Rivera", "Where do you find royalty-free music like that? Drop the source please!", "Question", "Instagram", "6 hours ago", 7],
+    ["Emma L.", "I've been following your channel for months—always solid advice 🙌", "Positive", "TikTok", "7 hours ago", 12],
+  ];
+  return `
+    <section class="page page-v4 ct-page ct-community-page">
+      <div class="ct-page-heading"><div><h2>💬 Community & Comments</h2><p>Engage with your audience and turn conversations into content.</p></div><button class="button primary">↓ Export</button></div>
+      <div class="ct-comment-layout"><main><div class="ct-filter-row"><button>All Platforms⌄</button><button>All Videos⌄</button><button>All Time⌄</button><div class="ct-search-box">🔍 Search comments...</div><button class="button primary">Filters</button></div><div class="ct-chip-tabs">${["All Comments 324","Positive 186","Questions 78","Neutral 42","Negative 18","Spam 6"].map((x,i)=>`<button class="${i===0?"active":""}">${x}</button>`).join("")}</div><div class="ct-sort-line"><span>Showing 324 comments</span><span>Sort by: <button>Newest⌄</button></span></div><div class="ct-comment-list">${rows.map(([name,text,sentiment,platform,time,likes],i)=>`<article class="ct-comment-card"><div class="ct-comment-avatar">${name.slice(0,1)}</div><div><div class="ct-comment-head"><strong>${name}</strong><small>${platform === "YouTube" ? "▶" : platform === "TikTok" ? "♪" : "◎"} ${time}</small><span class="ct-badge ${sentiment === "Positive" ? "good" : sentiment === "Question" ? "blue" : "bad"}">${sentiment}</span></div><p>${text}</p><div class="ct-comment-actions"><button>Reply</button><button>♡ ${likes}</button><button>View thread (${i+1})</button></div></div><button>•••</button></article>`).join("")}</div><button class="ct-soft-btn full-width">↻ Load more comments</button></main><aside><article class="ct-card ct-comment-summary"><div class="ct-card-top"><h3>✨ AI Comment Summary</h3><small>Updated just now</small></div><p>Your audience loves your actionable tips and editing style. They're asking for beginner gear recommendations, music sources, and real examples. A few people think it's clickbait—consider addressing results and expectations upfront.</p><div class="ct-three-stats"><div><strong>324</strong><small>Total Comments</small></div><div><strong>86%</strong><small>Positive Sentiment</small></div><div><strong>2.1h</strong><small>Avg. Response Time</small></div></div></article><article class="ct-card"><div class="ct-card-top"><h3>✨ AI Suggested Replies</h3><a>See more</a></div>${["Thanks so much! 🙌 So happy to hear it's helping you grow!","Great question! I recommend the Sony ZV-E10 for beginners. Affordable and super versatile.","You're right—results take time. In this video I share what actually works for me."].map(x=>`<div class="ct-reply-row"><p>${x}</p><button>Use Reply</button><button>Save as Idea</button></div>`).join("")}</article><div class="ct-comment-side-grid"><article class="ct-card"><h4>Top Questions to Turn Into Content</h4><ol><li>Best camera for beginners?</li><li>How to get more views fast?</li><li>Where do you get music?</li></ol><button class="button primary full-width">Turn into Video</button></article><article class="ct-card"><h4>Loyal Fans</h4><p>Sarah J. · 28 comments 🏆</p><p>Lily Carter · 21 comments 🏆</p><p>Emma L. · 18 comments</p></article><article class="ct-card"><h4>Toxic / Spam Review</h4><p>CoolGuy23 <span class="ct-badge bad">Negative</span></p><button class="ct-danger-btn">Review & Moderate</button></article><article class="ct-card ct-community-health"><h4>Community Health</h4><div class="ct-ring" style="--score:86"><strong>86</strong><small>/100</small></div><p>Very Healthy</p></article></div></aside></div>
+    </section>`;
+}
+
+function calendarPageV4() {
+  const selected = state.selectedCalendarDate || "2024-05-22";
+  return `
+    <section class="page page-v4 ct-page ct-calendar-page">
+      <div class="ct-page-heading"><div><h2>Content Calendar</h2><p>Plan smarter. Create consistently.</p></div><div><button class="ct-soft-btn">←</button><button class="ct-soft-btn">→</button><button class="ct-soft-btn">May 2024⌄</button><button class="button primary">+ Today</button></div></div>
+      <div class="ct-calendar-layout"><main><div class="ct-calendar-metrics">${["Content Balance|72%|Balanced","Burnout Risk|Low|Keep it up!","Content Planned|28|This Month","Consistency Streak|14 Days|Keep the momentum!"].map((x,i)=>{const [a,b,c]=x.split("|"); return `<article class="ct-card"><h4>${a}</h4><strong>${b}</strong><small>${c}</small></article>`}).join("")}</div><div class="ct-calendar-controls"><button class="active">Month</button><button>Week</button><button>List</button><button class="active">All</button><button>▶ YouTube</button><button>⚡ Shorts</button><button>♪ TikTok</button><button>◎ Instagram</button><button>𝕏 X / Twitter</button><span></span><button>Filters</button></div><div class="ct-calendar-grid-pro">${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=>`<strong>${d}</strong>`).join("")}${Array.from({length:35}).map((_,i)=>ctCalendarCell(i)).join("")}</div><div class="ct-calendar-legend">▶ YouTube · ⚡ Shorts · ♪ TikTok · ◎ Instagram · 𝕏 X / Twitter · +2 more <span>All times shown in your local time ⓘ</span></div></main><aside><article class="ct-card ct-day-panel"><div class="ct-card-top"><h3>Wed, May 22, 2024</h3><button data-action="v4-close-calendar-day">×</button></div><div class="ct-day-stats"><div>4<small>Contents</small></div><div>8h 15m<small>Total Time</small></div><div>Good<small>Pace</small></div></div><h4>Today's Schedule</h4>${["09:00 AM|How I Use AI to Save 10+...|Published","12:00 PM|3 ChatGPT Hacks You Need...|Scheduled","03:00 PM|Day in the Life: Full-Time...|Scheduled","06:00 PM|My Top AI Tools in 2024|Draft"].map(x=>{const [t,title,status]=x.split("|");return `<div class="ct-day-event"><time>${t}</time><strong>${title}</strong><span>${status}</span></div>`}).join("")}<button class="button primary full-width">+ Add Content to This Day</button></article><article class="ct-card ct-ai-planning"><h3>AI Planning Assistant <span class="ct-badge purple">Beta</span></h3><div class="ct-ai-bubble"><div class="ct-bot-face">☻</div><p>Great balance today! Consider adding a community post in the evening to boost engagement.</p></div><button class="ct-soft-btn full-width">Suggest Ideas</button></article><div class="ct-two-col"><article class="ct-card"><h4>Burnout Risk</h4><strong class="ct-good">Low⌄</strong>${ctMiniSvg("green")}</article><article class="ct-card"><h4>Content Balance</h4>${ctDonut()}<p>Balanced</p></article></div></aside></div>${state.selectedCalendarDate ? calendarDayModal(selected, normalizeList(state.calendar), normalizeList(state.googleCalendarEvents)) : ""}
+    </section>`;
+}
+
+function ctCalendarCell(i) {
+  const date = i - 1;
+  const actual = date <= 0 ? 29 + i : date;
+  const selected = actual === 22;
+  const items = ["YouTube Long", "Shorts", "TikTok Video", "Instagram Reel", "X Thread"].filter((_,idx)=>(i+idx)%3===0).slice(0, selected ? 3 : 2);
+  return `<button class="ct-calendar-cell ${selected?"selected":""}" type="button" data-action="v4-open-calendar-day" data-date="2024-05-${String(actual).padStart(2,"0")}"><strong>${actual}</strong>${items.map((it,j)=>`<span class="type-${j}">${it}</span>`).join("")}${items.length>2?`<small>+1 more</small>`:""}</button>`;
+}
+
+function youtubeGrowthPageV4() {
+  const videos = ctMockVideos();
+  return `
+    <section class="page page-v4 ct-page ct-analytics-page">
+      <div class="ct-page-heading"><div><h2>Analytics Overview</h2><p>Track performance, audience behavior, and growth trends.</p></div><button class="ct-soft-btn">📅 Last 28 days⌄</button></div>
+      <div class="ct-analytics-metrics">${["Views|128K|18.6%|blue","Watch Time|8.4K hrs|21.3%|blue","Engagement Rate|7.6%|14.2%|purple","Subscribers|+1.2K|12.7%|purple","CTR|6.3%|9.8%|purple"].map(x=>{const [a,b,c,t]=x.split("|");return `<article class="ct-card ct-stat-card"><h4>${a}</h4><strong>${b}</strong><span>↑ ${c}</span>${ctMiniSvg(t)}</article>`}).join("")}</div><div class="ct-analytics-layout"><article class="ct-card ct-views-chart"><div class="ct-card-top"><h3>Views Over Time ⓘ</h3><button>Daily⌄</button></div>${ctLineChart()}</article><article class="ct-card"><div class="ct-card-top"><h3>Top Performing Content</h3><button>View All</button></div>${videos.map(v=>`<div class="ct-video-row">${ctVideoThumb(v.title.slice(0,12), v.duration)}<strong>${escapeHtml(v.title)}</strong><span>Views <b>${Number(v.views).toLocaleString()}</b> ↑</span><span>Watch Time <b>${v.watchTime}</b></span></div>`).join("")}</article><article class="ct-card"><h3>Retention & Drop-off ⓘ</h3><strong>4:32 <span class="ct-good">↑ 12.4%</span></strong><div class="ct-retention-curve"></div><p>47% of viewers are still watching at the 50% mark.</p></article><article class="ct-card"><h3>Topic Performance ⓘ</h3>${ctDonut()}<div class="ct-topic-list"><p><span></span>Tutorials 42%</p><p><span></span>Shorts 28%</p><p><span></span>Personal Stories 18%</p><p><span></span>AI Tools 12%</p></div></article><article class="ct-card"><h3>✨ AI Insights</h3>${["AI Tools content is growing 28% faster than average.","Your Shorts have a 18% higher completion rate.","Posting between 12PM - 3PM gets the most engagement."].map(x=>`<p class="ct-check">${x}</p>`).join("")}<h4>What to Improve</h4>${["Personal Stories have lower retention after 3 minutes.","Thumbnails with faces get 24% more clicks.","Try longer-form content on weekends for more watch time."].map(x=>`<p class="ct-warn">${x}</p>`).join("")}<button class="ct-soft-btn full-width">View All AI Recommendations →</button></article></div>
+    </section>`;
+}
+
+function videoCheckerPageV4() {
+  return `
+    <section class="page page-v4 ct-page ct-video-checker-page">
+      <div class="ct-page-heading"><div><h2>▣ Video Checker</h2><p>Analyze any YouTube video to optimize performance and growth.</p></div><div><button class="ct-soft-btn">History</button><button class="button primary">New Check</button></div></div>
+      <div class="ct-video-checker-layout"><article class="ct-card ct-video-input"><div class="ct-tabs"><button class="active">🔗 YouTube URL</button><button>⇧ Upload Video</button></div><label>Paste a YouTube video link</label><input id="video-check-url" value="https://www.youtube.com/watch?v=dQw4w9WgXcQ"><label>Context</label><textarea id="video-check-context" placeholder="What should the AI pay attention to?"></textarea><input id="video-check-file" type="file" accept="video/*,audio/*"><button class="button primary full-width" data-action="v4-video-check">✨ Analyze Video</button><small>🔒 We never store or share your video.</small></article><article class="ct-card ct-video-player"><div class="ct-player-thumb"><span>▶</span></div></article><article class="ct-card ct-video-meta"><h3>10 AI Tools That Will 10X Your Content Creation</h3><p>Creator Studio ✓</p><p>👁 128K views</p><p>👍 6.2K · 💬 432</p><p>📅 May 20, 2024</p><span class="ct-badge">Education</span></article></div>
+      <div class="ct-video-score-grid"><article class="ct-card ct-total-score"><div class="ct-ring big" style="--score:82"><strong>82</strong><small>/100</small></div><div><h3>Great job! 🎉</h3><p>This video is optimized well and has strong potential to perform.</p><button class="ct-soft-btn">View Summary</button></div></article>${["Audio Quality|84|Great","Video Quality|88|Great","Hook Strength|79|Good","Title Quality|83|Great","Thumbnail Quality|81|Great","Audience Fit|76|Good","Retention Potential|78|Good","Publish Readiness|87|Excellent"].map(x=>{const [a,b,c]=x.split("|");return `<article class="ct-card ct-mini-score"><div class="ct-ring small" style="--score:${b}"><strong>${b}</strong><small>/100</small></div><h4>${a}</h4><p>${c}</p></article>`}).join("")}</div>
+      <div class="ct-video-bottom-grid"><article class="ct-card"><h3>Performance Overview</h3><div class="ct-radar">${ctMiniSvg("purple")}</div></article><article class="ct-card"><h3>Audience This Video Appeals To</h3>${["Content Creators|54","Digital Marketers|24","Entrepreneurs|13","Students|9"].map(x=>{const [a,b]=x.split("|"); return `<div class="ct-bar-line"><span>${a}</span><b style="width:${b}%"></b><em>${b}%</em></div>`}).join("")}</article><article class="ct-card"><h3>Top Improvement Suggestions</h3>${["Strengthen the hook in the first 5 seconds","Improve thumbnail contrast and focus","Add more pattern interrupts","Encourage engagement"].map((x,i)=>`<div class="ct-fix-row"><span>${["🪝","🖼️","🔁","💚"][i]}</span><strong>${x}</strong><small>${i<2?"High Impact":i===2?"Medium Impact":"Low Impact"}</small></div>`).join("")}</article><article class="ct-card"><h3>Improvement Checklist <small>4 / 8 completed</small></h3>${["Write a stronger title","Design a high-CTR thumbnail","Create a powerful hook (0–5s)","Add pattern interrupts","Improve audio clarity","Add chapters","Include a call to action","Optimize tags & description"].map((x,i)=>`<label class="ct-check-row"><input type="checkbox" ${i<4?"checked":""}> ${x}</label>`).join("")}</article></div>
+    </section>`;
+}
+
+function detailedVideoAnalysisPageV4() {
+  return `
+    <section class="page page-v4 ct-page ct-detail-page">
+      <div class="ct-page-heading"><div><h2>Detailed Video Analysis</h2><p>Dashboard › Analytics › Detailed Video Analysis</p></div><div><button class="ct-soft-btn">↓ Export Report</button><button class="button primary">Analyze Another Video</button></div></div>
+      <article class="ct-card ct-selected-video"><div>${ctVideoThumb("10 AI TOOLS","12:45")}</div><div><h3>10 AI Tools for Creators in 2024</h3><p>Published Jan 5, 2024 · 12:45</p><p>Discover the 10 best AI tools that will save you time and level up your content in 2024.</p><div class="ct-tag-row"><span>AI</span><span>Productivity</span><span>Tools</span><span>Tutorial</span></div></div>${["Views|128K|+18%","Watch Time|8.2K|+22%","Engagement|7.8%|+16%"].map(x=>{const [a,b,c]=x.split("|"); return `<div class="ct-card ct-mini-detail"><h4>${a}</h4><strong>${b}</strong><span>${c}</span></div>`}).join("")}<div>${ctRing("Overall Score","87","Great performance!")}</div></article>
+      <div class="ct-detail-grid"><article class="ct-card"><h3>Views Over Time</h3>${ctLineChart()}</article><article class="ct-card"><h3>Watch Time (Hours)</h3>${ctLineChart()}</article><article class="ct-card"><h3>Average View Duration</h3>${ctLineChart()}</article><article class="ct-card"><h3>Impressions Click-Through Rate</h3>${ctLineChart()}</article><article class="ct-card"><h3>Audience Retention</h3><div class="ct-retention-curve big"></div><p>Most viewers drop off at 2:15. Consider a stronger hook earlier to improve retention.</p></article><article class="ct-card"><h3>Audience Segments</h3>${ctDonut()}<div class="ct-topic-list"><p>18–24 22%</p><p>25–34 42%</p><p>35–44 21%</p><p>45–54 9%</p></div></article><article class="ct-card"><h3>Traffic Sources</h3>${ctDonut()}<p>Browse Features 45.2%</p><p>Suggested Videos 28.1%</p><p>YouTube Search 14.3%</p></article><article class="ct-card"><h3>Platform Performance</h3>${["YouTube|7.1K|86%","YouTube Shorts|620|7%","Embed / Websites|280|3%","External Apps|120|2%"].map(x=>{const [a,b,c]=x.split("|");return `<div class="ct-platform-perf"><span>${a}</span><b>${b}</b><em>${c}</em></div>`}).join("")}</article></div>
+      <article class="ct-card ct-rec-strip"><h3>AI Insights & Recommendations</h3><div class="ct-rec-row">${["Title|7/10|Good keyword use but could be more curiosity-driven.","Thumbnail|8/10|Strong visual and contrast. Test fewer words.","First 30 Seconds|6/10|Retention drops early. Start with a preview of value.","Pacing|7/10|Good overall pace with a few slow sections.","Audience Targeting|8/10|Strong fit for your core audience.","Follow-Up Ideas|10 ideas|Generate more ideas based on this topic."].map(x=>{const [a,b,c]=x.split("|");return `<div><strong>${a} <span>${b}</span></strong><p>${c}</p><button class="ct-soft-btn">Improve →</button></div>`}).join("")}</div></article>
+    </section>`;
+}
+
+function publishingPageV4() {
+  return `
+    <section class="page page-v4 ct-page ct-publish-page">
+      <div class="ct-page-heading"><div><h2>Publish Everywhere <span class="ct-badge purple">AI-Powered</span></h2><p>Upload once. Adapt intelligently. Publish everywhere.</p></div><button class="ct-soft-btn">Bulk Actions⌄</button></div>
+      <div class="ct-publish-layout"><article class="ct-card"><h3>1. Select or Upload Video ⓘ</h3><div class="ct-publish-video"><span>▶</span></div><h4>How I Use AI to Save 10+ Hours a Week</h4><p>03:26 · 1080p · 119 MB</p><button class="button primary">Replace Video</button><button class="ct-soft-btn">✂ Edit Video</button></article><article class="ct-card"><div class="ct-card-top"><h3>2. AI Adapts for Each Platform</h3><a>✨ How it works</a></div>${["YouTube|16:9 Landscape|Title Variants|Caption Tweaks|Thumbnail Optimized|Ready","YouTube Shorts|9:16 Vertical|Title Variants|Caption Tweaks|Auto-Crop 9:16|Ready","TikTok|9:16 Vertical|Hook Variants|Caption Tweaks|Auto-Crop 9:16|Ready","Instagram Reels|9:16 Vertical|Hook Variants|Caption Tweaks|Auto-Crop 9:16|Ready","X / Twitter|16:9 or 1:1|Title Variants|Caption Tweaks|Media Format 16:9|Scheduled"].map(x=>{const parts=x.split("|");return `<div class="ct-publish-row"><strong>${parts[0]}<small>${parts[1]}</small></strong><span>${parts[2]}<b>3</b></span><span>${parts[3]}<b>3</b></span><span>${parts[4]}</span><em>${parts[5]}</em><button>•••</button></div>`}).join("")}</article><aside><article class="ct-card"><h3>3. Schedule & Publish</h3><div class="ct-tabs"><button class="active">Schedule</button><button>Publish Now</button></div><label>Select Date & Time</label><div class="ct-input-fake">📅 May 22, 2024 ⏰ 10:00 AM</div><label>Time Zone</label><div class="ct-input-fake">(GMT-7) Pacific Time⌄</div><div class="ct-ai-bubble"><p>Best time to post tomorrow at 10:00 AM. High engagement predicted.</p></div><button class="button primary full-width">Schedule All</button></article><article class="ct-card ct-privacy-hero"><div class="ct-shield">🛡️</div><h3>Privacy-First</h3><p>Your data stays yours. We don't train on your content.</p><div class="ct-lock-pill">🔒 No data shared</div></article><article class="ct-card"><h3>AI Publishing Agent <span class="ct-badge purple">Beta</span></h3><div class="ct-ai-bubble"><div class="ct-bot-face">☻</div><p>I'll handle cross-platform publishing for you.</p></div><p class="ct-check">Adapt content for each platform</p><p class="ct-check">Optimize captions and titles</p><p class="ct-check">Pick the best time to post</p><button class="button primary full-width">Let AI Handle It</button></article></aside></div>
+      <article class="ct-card ct-platform-manage"><div class="ct-card-top"><h3>4. Preview & Manage Content per Platform</h3><button>Preview All</button></div><div class="ct-platform-tabs mini">${["▶ YouTube","⚡ YouTube Shorts","♪ TikTok","◎ Instagram Reels","𝕏 X / Twitter"].map((x,i)=>`<button class="${i===0?"active":""}">${x}</button>`).join("")}</div><div class="ct-manage-grid"><div>${ctVideoThumb("10+ HOURS SAVED","")}</div><div><label>Title Variants</label><div class="ct-input-fake">How I Use AI to Save 10+ Hours a Week</div><div class="ct-input-fake">I Save 10+ Hours Every Week Using AI</div><div class="ct-input-fake">AI Workflow That Saves Me 10+ Hours Weekly</div><label>Description / Caption</label><div class="ct-input-fake tall">Here's how I use AI tools to save 10+ hours every week...</div></div><div><h4>AI Suggestions</h4><p class="ct-check">Added trending keyword “AI workflow”</p><p class="ct-check">Optimized title for CTR</p><p class="ct-check">Strong hook in first 15 words</p><p class="ct-check">Best time to post: Tomorrow 10:00 AM</p></div></div></article>
+    </section>`;
+}
+
+function inspirationPageV4() {
+  const cards = ["Build in Public: What I Learned in 30 Days","5 Creator Habits That Actually Scale","The 3-Part Formula That Hooks Every Time","How I Create Content with $0 Budget","Stop Scrolling: The Hook That Works","My Weekly Content Planning System"];
+  return `
+    <section class="page page-v4 ct-page ct-inspiration-page">
+      <div class="ct-page-heading"><div><h2>Inspiration Library</h2><p>Save ideas, references, and trends to turn into original content.</p></div><button class="ct-soft-btn">🔗 Import Link</button></div>
+      <div class="ct-category-tabs">${["Trending","Educational","Hooks","Storytelling","Editing","Brand Ideas","›"].map((x,i)=>`<button class="${i===0?"active":""}">${x}</button>`).join("")}</div>
+      <div class="ct-inspiration-layout"><main><div class="ct-inspiration-grid">${cards.map((x,i)=>`<article class="ct-inspire-card ${i===0?"active":""}">${ctVideoThumb(i===0?"Build in Public":i===1?"5 CREATOR HABITS":i===2?"Hook Story Offer":i===3?"$0 Content System":i===4?"STOP SCROLLING":"Plan My Week", ["10:24","01:15","00:58","06:42","00:33","07:12"][i])}<span>${i===5?"Article":i===4?"TikTok Video":i===1?"Instagram Post":i===2?"YouTube Shorts":"YouTube Video"}</span><h3>${x}</h3><p>${["Pat Flynn","@aliabdaal","Alex Hormozi","Think Media","@justinwelsch","ConvertKit Blog"][i]}</p><div class="ct-tag-row"><span>${["Storytelling","Educational","Hooks","Strategy","Engagement","Productivity"][i]}</span><span>${["Build in Public","Productivity","Copywriting","Strategy","Hooks","Planning"][i]}</span></div></article>`).join("")}</div><button class="ct-soft-btn full-width">Load More Inspiration⌄</button><div class="ct-note-bar">✅ <strong>Use this as inspiration, not copying.</strong><span>Great creators build on ideas and make them their own.</span><button>Learn More</button></div></main><aside class="ct-card ct-inspire-detail"><div class="ct-card-top"><span>▶ YouTube Video</span><span>Saved 2 days ago 🔖 ×</span></div><div class="ct-inspire-hero">${ctVideoThumb("Build in Public.","10:24")}</div><h3>Build in Public: What I Learned in 30 Days</h3><p>Pat Flynn ✓ · 1.2M subscribers</p><h4>Notes <button>Edit</button></h4><p>Great breakdown of how sharing the journey helps build trust and momentum. Loved the real examples and honest takeaways.</p><h4>Key Takeaways</h4><p class="ct-check">Sharing progress builds stronger connections.</p><p class="ct-check">Consistency &gt; perfection.</p><p class="ct-check">The journey is the content.</p><div class="ct-tag-row"><span>Build in Public</span><span>Storytelling</span><span>Mindset</span><span>Consistency</span></div><button class="button primary full-width">↗ Analyze Content</button><div class="ct-two-col"><button class="ct-soft-btn">🪄 Make It Mine</button><button class="ct-soft-btn">💡 Save as Idea</button></div></aside></div>
+    </section>`;
+}
+
+function coachPageV4() {
+  return `<section class="page page-v4 ct-page ct-coach-page"><div class="ct-page-heading"><div><h2>AI Channel Coach</h2><p>Talk to Contentus about what to improve and what to make next.</p></div></div><div class="ct-coach-layout"><article class="ct-card"><h3>Channel Strategy Chat</h3><div class="ct-ai-bubble"><div class="ct-bot-face">☻</div><p>Ask me why a video underperformed, what trend to target, or what to add next to your channel.</p></div>${["What should I improve next?","Why did my last video underperform?","Give me ideas for next week","What trend should I target?"].map(x=>`<button class="ct-suggestion" data-action="v4-coach-prompt" data-prompt="${escapeHtml(x)}">${x}</button>`).join("")}<div class="ct-chat-input">Ask me anything about your channel... <span data-action="v4-coach-send">➤</span></div></article><article class="ct-card"><h3>Recommended Next Moves</h3>${["Make one trend-backed video this week.","Rewrite your next intro to show proof first.","Turn your top audience question into a short.","Test a cleaner thumbnail with fewer words."].map(x=>`<p class="ct-check">${x}</p>`).join("")}</article></div></section>`;
+}
