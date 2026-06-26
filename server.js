@@ -13,6 +13,10 @@ const WORKSPACE_STATE_DIR = path.join(__dirname, ".contentus-state");
 const WORKSPACE_STATE_FILE = path.join(WORKSPACE_STATE_DIR, "workspaces.json");
 const SUPABASE_URL = normalizeSupabaseProjectUrl(trimEnv("SUPABASE_URL"));
 const SUPABASE_ANON_KEY = trimEnv("SUPABASE_ANON_KEY");
+const FEATHERLESS_API_KEY = trimEnv("FEATHERLESS_API_KEY");
+const FEATHERLESS_BASE_URL = (trimEnv("FEATHERLESS_BASE_URL") || "https://api.featherless.ai/v1").replace(/\/+$/, "");
+const FEATHERLESS_MODEL = trimEnv("FEATHERLESS_MODEL") || "meta-llama/Meta-Llama-3.1-8B-Instruct";
+const FEATHERLESS_VISION_MODEL = trimEnv("FEATHERLESS_VISION_MODEL") || FEATHERLESS_MODEL;
 const GEMINI_API_KEY = trimEnv("GEMINI_API_KEY");
 const GOOGLE_CLIENT_ID = trimEnv("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = trimEnv("GOOGLE_CLIENT_SECRET");
@@ -76,6 +80,7 @@ function integrationStatus() {
   const googleClient = configured(GOOGLE_CLIENT_ID) && configured(GOOGLE_CLIENT_SECRET);
   return {
     supabase: configured(SUPABASE_URL) && configured(SUPABASE_ANON_KEY),
+    featherless: configured(FEATHERLESS_API_KEY),
     gemini: configured(GEMINI_API_KEY),
     googleOAuth: googleClient && configured(GOOGLE_REDIRECT_URI),
     googleOAuthClient: googleClient,
@@ -106,7 +111,7 @@ server.listen(PORT, () => {
 });
 
 async function serveStatic(response, pathname) {
-  const safePath = pathname === "/" ? "/index.html" : decodeURIComponent(pathname);
+  const safePath = pathname === "/" ? "/Landing Page.dc.html" : decodeURIComponent(pathname);
   const filePath = path.normalize(path.join(__dirname, safePath));
 
   if (!filePath.startsWith(__dirname)) {
@@ -161,7 +166,7 @@ async function handleApi(request, response, url) {
       app: "Contentus",
       integrations: integrationStatus(),
       authProvider: integrationStatus().supabase ? "supabase" : "not-configured",
-      aiProvider: integrationStatus().gemini ? "gemini" : "not-configured",
+      aiProvider: integrationStatus().featherless ? "featherless" : "local-fallback",
       youtubeProvider: integrationStatus().youtubeData ? "youtube-data-api" : "not-configured",
     });
     return;
@@ -758,14 +763,14 @@ Return this JSON shape:
 
 Rules: do not invent private facts. If data is thin, say what is uncertain. Preserve originality and warn against copying.
 `;
-  const result = await callGeminiJson(prompt, fallback, {
+  const result = await callFeatherlessJson(prompt, fallback, {
     media: body.media,
     temperature: 0.25,
   });
   return {
     ...fallback,
     ...result,
-    mediaNote: [mediaNote, youtubeContext?.note, result.mediaNote].filter(Boolean).join(" "),
+    mediaNote: [mediaNote, youtubeContext?.note, result.mediaNote, result.warning].filter(Boolean).join(" "),
   };
 }
 
@@ -805,7 +810,7 @@ ${JSON.stringify(body, null, 2)}
 Rules: no copying, no fake trend claims, no spam growth tactics, include a real personalization tip for every idea.
 For hit/miss: "hitProbability" is an honest 0-100 estimate of whether this idea will perform for THIS creator on THIS platform/goal — not hype. Base it on hook strength, audience fit, originality vs. saturation, and emotional pull. "verdict" must agree with the number (>=65 hit, 45-64 coin flip, <45 miss). "hitReasons" are 2-3 concrete reasons it could land; "missRisks" are 1-3 honest reasons it could flop. Be willing to predict a miss.
 `;
-  const result = await callGeminiJson(prompt, { ideas: fallback }, { temperature: 0.55 });
+  const result = await callFeatherlessJson(prompt, { ideas: fallback }, { temperature: 0.55 });
   return normalizeArray(result.ideas).length ? result.ideas : fallback;
 }
 
@@ -851,7 +856,7 @@ Return this JSON:
 
 "sections" is the spoken script broken into labeled beats, e.g. labels like "Hook", "Setup", "Main point 1", "Main point 2", "Payoff", "Call to action". For short videos use 3-5 sections; for long videos use more. Each "spoken" value is the exact words to say for that beat.
 `;
-  const result = await callGeminiJson(prompt, fallback, { temperature: 0.6 });
+  const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.6 });
   const sections = normalizeArray(result.sections).filter((s) => s && (s.spoken || s.label));
   const script = { ...fallback, ...result, sections, targetLength: result.targetLength || lengthLabel };
   // Build the flat "script" string from sections so it renders cleanly and stays
@@ -906,7 +911,7 @@ Return:
 
 Rules: flag unsafe claims, avoid deepfake/likeness misuse, include an AI disclosure line if AI assisted.
 `;
-  const result = await callGeminiJson(prompt, fallback, { temperature: 0.5 });
+  const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.5 });
   return { ...fallback, ...result, versions: normalizeArray(result.versions).length ? result.versions : fallback.versions };
 }
 
@@ -921,7 +926,7 @@ Style: ${body.style || "clean proof"}
 Creator DNA: ${JSON.stringify(body.dna || {})}
 Use very few words. No clickbait lies.
 `;
-  const result = await callGeminiJson(prompt, { suggestions: fallback }, { temperature: 0.35, maxOutputTokens: 350 });
+  const result = await callFeatherlessJson(prompt, { suggestions: fallback }, { temperature: 0.35, maxOutputTokens: 350 });
   return normalizeArray(result.suggestions).length ? result.suggestions : fallback;
 }
 
@@ -956,7 +961,7 @@ ${String(body.text || "").slice(0, 14000)}
 
 Rules: encourage originality, flag generic AI style, risky claims, copied inspiration, and missing disclosure.
 `;
-  return callGeminiJson(prompt, fallback, { temperature: 0.25 });
+  return callFeatherlessJson(prompt, fallback, { temperature: 0.25 });
 }
 
 async function generateCommunityReplies(body = {}) {
@@ -997,7 +1002,7 @@ For toxic/troll comments: write a short, unbothered, classy reply (or note it is
 sentiment = positive | neutral | negative. importance = high | medium | low (questions and repeated themes are high).
 videoIdea = a short next-video idea only when the comment clearly suggests one, else "".
 `;
-  const result = await callGeminiJson(prompt, fallback, { temperature: 0.7 });
+  const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.7 });
   return { comments: normalizeArray(result.comments).length ? result.comments : fallback.comments };
 }
 
@@ -1049,7 +1054,7 @@ Creator DNA: ${JSON.stringify(body.dna || {}, null, 2)}
 
 Rules: identify the underlying FORMAT/PATTERN behind what is trending, not just the topics. For each trend give a "creatorAngle" that fits THIS creator's niche and voice — never tell them to copy a video. "riskNote" flags saturation, fad risk, or licensing/audio concerns. "audioTrends" approximates trending sounds/music styles for the platform (note these are approximations, not licensed picks). Be honest when a trend is already saturated.
 `;
-  const result = await callGeminiJson(prompt, fallback, { temperature: 0.5 });
+  const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.5 });
   return {
     summary: result.summary || fallback.summary,
     trends: normalizeArray(result.trends).length ? result.trends : fallback.trends,
@@ -1139,7 +1144,7 @@ ${body.media ? "An uploaded video/clip is attached — analyze the actual footag
 
 Rules: all numeric scores are 0-100 and honest — do not inflate. "firstThreeSeconds" critiques the opening hook specifically. "improvements" are concrete, ordered by impact. Be willing to say a video needs work.
 `;
-  const result = await callGeminiJson(prompt, fallback, { media: body.media, temperature: 0.4 });
+  const result = await callFeatherlessJson(prompt, fallback, { media: body.media, temperature: 0.4 });
   return {
     ...fallback,
     ...result,
@@ -1411,42 +1416,71 @@ async function youtubeApi(resource, params = {}) {
   return data;
 }
 
-async function callGeminiJson(prompt, fallback, options = {}) {
-  if (!configured(GEMINI_API_KEY)) return fallback;
-  const model = process.env.GEMINI_MODEL || "gemini-2.0-flash";
-  const parts = [{ text: prompt }];
-  if (options.media?.data && options.media?.mimeType) {
-    parts.push({
-      inline_data: {
-        mime_type: options.media.mimeType,
-        data: options.media.data,
-      },
-    });
-  }
+async function callFeatherlessJson(prompt, fallback, options = {}) {
+  if (!configured(FEATHERLESS_API_KEY)) return fallback;
+  const mediaPayload = featherlessMessageContent(prompt, options.media);
+  const model = mediaPayload.usesImage ? FEATHERLESS_VISION_MODEL : FEATHERLESS_MODEL;
 
   try {
-    const result = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`, {
+    const result = await fetch(`${FEATHERLESS_BASE_URL}/chat/completions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${FEATHERLESS_API_KEY}`,
+      },
       body: JSON.stringify({
-        contents: [{ role: "user", parts }],
-        generationConfig: {
-          temperature: options.temperature ?? 0.35,
-          maxOutputTokens: options.maxOutputTokens || 8192,
-          responseMimeType: "application/json",
-        },
+        model,
+        messages: [
+          { role: "system", content: "Return valid JSON only. Do not include markdown fences or explanatory text." },
+          { role: "user", content: mediaPayload.content },
+        ],
+        temperature: options.temperature ?? 0.35,
+        max_tokens: options.maxOutputTokens || 8192,
       }),
     });
     const text = await result.text();
     const payload = text ? JSON.parse(text) : {};
     if (!result.ok) {
-      return { ...fallback, warning: payload.error?.message || `Gemini request failed with ${result.status}` };
+      return { ...fallback, warning: payload.error?.message || `Featherless request failed with ${result.status}` };
     }
-    const output = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
-    return parseJsonOutput(output, fallback);
+    const output = payload.choices?.[0]?.message?.content || "";
+    const parsed = parseJsonOutput(output, fallback);
+    if (mediaPayload.warning && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { ...parsed, warning: [parsed.warning, mediaPayload.warning].filter(Boolean).join(" ") };
+    }
+    return parsed;
   } catch (error) {
     return { ...fallback, warning: error.message };
   }
+}
+
+function featherlessMessageContent(prompt, media = null) {
+  if (!media?.data || !media?.mimeType) {
+    return { content: prompt, usesImage: false, warning: "" };
+  }
+
+  if (/^image\//i.test(media.mimeType)) {
+    return {
+      content: [
+        { type: "text", text: prompt },
+        { type: "image_url", image_url: { url: `data:${media.mimeType};base64,${media.data}` } },
+      ],
+      usesImage: true,
+      warning: "",
+    };
+  }
+
+  const metadata = [
+    `Uploaded media name: ${media.name || "unnamed"}`,
+    `Uploaded media type: ${media.mimeType}`,
+    media.truncated ? "Uploaded media was trimmed before analysis." : "",
+  ].filter(Boolean).join("\n");
+
+  return {
+    content: `${prompt}\n\n${metadata}\n\nThe configured Featherless chat route cannot directly inspect this non-image binary. Be transparent about that limitation and rely only on provided text, URL context, and metadata.`,
+    usesImage: false,
+    warning: "Featherless skipped direct non-image media inspection; add transcript text for better analysis.",
+  };
 }
 
 function parseJsonOutput(output, fallback) {

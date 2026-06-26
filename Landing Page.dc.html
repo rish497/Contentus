@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&display=swap" rel="stylesheet">
+<script src="image-slot.js"></script>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#ffffff;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  ::selection{background:#ddd0fb;color:#2a1a55}
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+  @keyframes nudge{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(7px);opacity:1}}
+  a{color:inherit}
+</style>
+</helmet>
+<div data-root style="font-family:Inter,system-ui,sans-serif;color:#1B1726;background:#ffffff;overflow-x:clip">
+
+  <div data-progress style="position:fixed;top:0;left:0;height:3px;width:100%;transform:scaleX(0);transform-origin:0 50%;background:linear-gradient(90deg,#6366F1,#9333EA);z-index:60;pointer-events:none"></div>
+
+  <header data-nav style="position:fixed;top:0;left:0;right:0;z-index:50;border-bottom:1px solid transparent;transition:background .4s ease,border-color .4s ease,box-shadow .4s ease">
+    <div style="max-width:1200px;margin:0 auto;padding:16px 40px;display:flex;align-items:center;justify-content:space-between;gap:24px">
+      <a href="#top" style="display:flex;align-items:center;gap:11px;text-decoration:none">
+        <img src="contentus.jpg" alt="" style="width:34px;height:34px;display:block;border-radius:10px;object-fit:cover"/>
+        <span style="font:600 19px/1 Inter,sans-serif;color:#1B1726;letter-spacing:-0.02em">Contentus</span>
+      </a>
+      <nav style="display:flex;align-items:center;gap:34px">
+        <a href="#story" style="font:500 14.5px Inter,sans-serif;color:#4A4458;text-decoration:none">The story</a>
+        <a href="#features" style="font:500 14.5px Inter,sans-serif;color:#4A4458;text-decoration:none">Features</a>
+        <a href="#how" style="font:500 14.5px Inter,sans-serif;color:#4A4458;text-decoration:none">How it works</a>
+      </nav>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a href="index.html#/login" style="font:500 14.5px Inter,sans-serif;color:#4A4458;text-decoration:none;padding:10px 14px">Sign in</a>
+        <a href="index.html#/login" style="display:inline-flex;align-items:center;font:600 14.5px Inter,sans-serif;color:#fff;text-decoration:none;background:linear-gradient(135deg,#6366F1 0%,#7C3AED 52%,#9333EA 100%);padding:11px 20px;border-radius:999px;box-shadow:0 6px 18px -6px rgba(124,58,237,.55)">Open your studio</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================== HERO ===================== -->
+  <section id="top" style="position:relative;min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:140px 40px 90px;overflow:hidden;background:linear-gradient(180deg,#F3EFFC 0%,#F8F5FD 50%,#ffffff 100%)">
+    <div aria-hidden="true" style="position:absolute;top:-24%;left:50%;transform:translateX(-50%);width:1100px;height:1100px;border-radius:50%;background:radial-gradient(closest-side,rgba(147,51,234,.16),rgba(99,102,241,.07) 55%,transparent 72%);pointer-events:none"></div>
+    <div style="position:relative;max-width:1000px;margin:0 auto;width:100%;text-align:center">
+      <div data-reveal data-ty="16" style="opacity:0;display:inline-flex;align-items:center;gap:9px;padding:7px 15px 7px 11px;border:1px solid #E4DBF7;background:rgba(255,255,255,.65);border-radius:999px;margin-bottom:32px">
+        <span style="width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg,#6366F1,#9333EA)"></span>
+        <span style="font:600 12px Inter,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:#6D28D9">A creator's story</span>
+      </div>
+      <h1 data-reveal data-ty="34" style="opacity:0;margin:0;font-family:'Canela','Canela Text','Playfair Display',Georgia,serif;font-weight:500;font-size:clamp(42px,6.6vw,92px);line-height:1.02;letter-spacing:-0.015em;color:#1B1726">
+        When I was a kid,<br>I always wanted to make<br>a <span style="font-style:italic;background:linear-gradient(120deg,#6366F1,#9333EA);-webkit-background-clip:text;background-clip:text;color:transparent">video.</span>
+      </h1>
+      <p data-reveal data-ty="24" style="opacity:0;max-width:580px;margin:32px auto 0;font:400 19px/1.65 Inter,sans-serif;color:#5C566B">
+        I just never thought the hard part would be sounding like <em style="font-style:italic;color:#1B1726">myself.</em> This is how that changed.
+      </p>
+      <div data-reveal data-ty="24" style="opacity:0;display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-top:40px">
+        <a href="index.html#/login" style="display:inline-flex;align-items:center;gap:8px;font:600 16px Inter,sans-serif;color:#fff;text-decoration:none;background:linear-gradient(135deg,#6366F1 0%,#7C3AED 52%,#9333EA 100%);padding:16px 30px;border-radius:999px;box-shadow:0 14px 30px -10px rgba(124,58,237,.6)">Open your studio →</a>
+        <a href="#story" style="display:inline-flex;align-items:center;gap:8px;font:600 16px Inter,sans-serif;color:#2A2240;text-decoration:none;background:#fff;border:1px solid #E4DBF7;padding:16px 26px;border-radius:999px">▷ Read the story</a>
+      </div>
+    </div>
+    <a href="#story" data-reveal style="opacity:0;position:absolute;left:50%;bottom:30px;transform:translateX(-50%);text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:8px">
+      <span style="font:500 11.5px Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#9B8FB8">Scroll</span>
+      <span style="display:block;width:22px;height:34px;border:1.5px solid #C9BCE6;border-radius:999px;position:relative"><span style="position:absolute;left:50%;top:7px;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:#7C3AED;animation:nudge 1.7s ease-in-out infinite"></span></span>
+    </a>
+  </section>
+
+  <!-- ===================== STORY — one continuous pinned freeze-scroll ===================== -->
+  <section id="story" data-chapter style="position:relative;height:720vh;background:#0B0716">
+    <div style="position:sticky;top:0;height:100vh;overflow:hidden">
+      <div aria-hidden="true" style="position:absolute;inset:0;background:#0B0716 url('assets/story-bg.png') center/cover no-repeat"></div>
+      <div aria-hidden="true" style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(11,7,22,.5),rgba(11,7,22,.28) 42%,rgba(11,7,22,.6))"></div>
+
+      <!-- SCENE 1 · the wall (dark) -->
+      <div data-scene data-a="-0.10" data-b="0.0" data-c="0.34" data-d="0.38" style="position:absolute;inset:0;opacity:1;display:flex;align-items:center;justify-content:center;text-align:center;padding:96px 40px 56px">
+        <div style="position:relative;max-width:860px">
+          <div data-step="0.03" data-span="0.035" data-ty="16" style="opacity:0;font:600 12px Inter,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#A78BFA;margin-bottom:30px">Chapter one — the wall</div>
+          <h2 data-step="0.095" data-span="0.04" style="opacity:0;margin:0 0 16px;font-family:'Canela','Playfair Display',Georgia,serif;font-weight:500;font-size:clamp(36px,5.6vw,76px);line-height:1.04;letter-spacing:-0.015em;color:#F4F0FF">Then I grew up.</h2>
+          <h2 data-step="0.17" data-span="0.04" style="opacity:0;margin:0 0 30px;font-family:'Canela','Playfair Display',Georgia,serif;font-weight:500;font-size:clamp(28px,4.4vw,58px);line-height:1.08;letter-spacing:-0.01em;color:#F4F0FF">And every blank page <span style="font-style:italic;color:#C4B5FD">won.</span></h2>
+          <p data-step="0.245" data-span="0.04" data-ty="24" style="opacity:0;margin:0 auto;max-width:560px;font:400 18px/1.65 Inter,sans-serif;color:#B7ACD6">Then came the tools that promised speed — and made everyone sound exactly the same.</p>
+        </div>
+      </div>
+
+      <!-- SCENE 2 · the turn (light) -->
+      <div data-scene data-a="0.38" data-b="0.42" data-c="0.72" data-d="0.765" style="position:absolute;inset:0;opacity:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:104px 40px 56px">
+        <div style="position:relative;max-width:900px;width:100%">
+          <div data-step="0.425" data-span="0.035" data-ty="16" style="opacity:0;font:600 12px Inter,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#A78BFA;margin-bottom:22px">Chapter two — the turn</div>
+          <h2 data-step="0.49" data-span="0.04" style="opacity:0;margin:0 0 38px;font-family:'Canela','Playfair Display',Georgia,serif;font-weight:500;font-size:clamp(32px,5vw,64px);line-height:1.05;letter-spacing:-0.015em;color:#F4F0FF">Then something finally learned<br>to sound like <span style="font-style:italic;background:linear-gradient(120deg,#6366F1,#9333EA);-webkit-background-clip:text;background-clip:text;color:transparent">me.</span></h2>
+          <div data-step="0.555" data-span="0.04" data-ty="40" style="opacity:0;max-width:600px;margin:0 auto;text-align:left;background:rgba(255,255,255,0.055);border:1px solid rgba(255,255,255,0.14);border-radius:20px;padding:26px 30px;box-shadow:0 30px 70px -34px rgba(0,0,0,0.6)">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:13px">
+              <span style="flex:none;width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6366F1,#9333EA);display:flex;align-items:center;justify-content:center"><span style="width:11px;height:11px;background:#fff;transform:rotate(45deg);border-radius:2px"></span></span>
+              <span style="font:600 11px Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#A78BFA">What Contentus does</span>
+            </div>
+            <p style="margin:0;font:400 16.5px/1.6 Inter,sans-serif;color:#D7CEEC">A personal AI studio that learns your <strong style="color:#fff;font-weight:600">Creator DNA</strong> — your tone, pacing and taste — then turns ideas into scripts, thumbnails and replies that still sound unmistakably like you.</p>
+          </div>
+          <p data-step="0.625" data-span="0.04" data-ty="24" style="opacity:0;margin:36px auto 0;max-width:560px;font:400 18px/1.65 Inter,sans-serif;color:#C7BCE6"><strong style="color:#ffffff;font-weight:600">Creator DNA</strong> studies your voice — your tone, your pacing, your taste. Not just your topic.</p>
+        </div>
+      </div>
+
+      <!-- SCENE 3 · now I can (lavender) -->
+      <div data-scene data-a="0.765" data-b="0.805" data-c="1.30" data-d="1.50" style="position:absolute;inset:0;opacity:0;display:flex;align-items:center;justify-content:center;padding:104px 40px 56px">
+        <div style="position:relative;max-width:860px;width:100%">
+          <div data-step="0.79" data-span="0.025" data-ty="16" style="opacity:0;font:600 12px Inter,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:#A78BFA;margin-bottom:14px;text-align:center">Chapter three — now</div>
+          <div data-step="0.835" data-span="0.03" data-ty="18" style="opacity:0;text-align:center;font-family:'Canela','Playfair Display',Georgia,serif;font-style:italic;font-weight:500;font-size:clamp(28px,4vw,46px);color:#F4F0FF;margin-bottom:44px">Now I can…</div>
+          <div style="display:flex;flex-direction:column;gap:22px;max-width:760px;margin:0 auto">
+            <div data-step="0.865" data-span="0.03" data-ty="30" style="opacity:0;display:flex;gap:22px;align-items:baseline">
+              <span style="font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:22px;color:#B69BFB;min-width:34px">01</span>
+              <div><div style="font:600 10.5px Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B69BFB;margin-bottom:6px">Idea Engine</div><div style="font-family:'Canela','Playfair Display',serif;font-weight:500;font-size:clamp(24px,3.4vw,40px);line-height:1.12;color:#EDE8FA">…start without the blank page.</div></div>
+            </div>
+            <div data-step="0.895" data-span="0.03" data-ty="30" style="opacity:0;display:flex;gap:22px;align-items:baseline">
+              <span style="font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:22px;color:#9B6BF2;min-width:34px">02</span>
+              <div><div style="font:600 10.5px Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B69BFB;margin-bottom:6px">Script Builder</div><div style="font-family:'Canela','Playfair Display',serif;font-weight:500;font-size:clamp(24px,3.4vw,40px);line-height:1.12;color:#EDE8FA">…write it in my own voice.</div></div>
+            </div>
+            <div data-step="0.925" data-span="0.025" data-ty="30" style="opacity:0;display:flex;gap:22px;align-items:baseline">
+              <span style="font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:22px;color:#7C3AED;min-width:34px">03</span>
+              <div><div style="font:600 10.5px Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#B69BFB;margin-bottom:6px">Authenticity Guard</div><div style="font-family:'Canela','Playfair Display',serif;font-weight:500;font-size:clamp(24px,3.4vw,40px);line-height:1.12;color:#EDE8FA">…and finally hit publish — without second-guessing.</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== FEATURES ===================== -->
+  <section id="features" style="position:relative;padding:120px 40px;background:#ffffff">
+    <div style="max-width:1160px;margin:0 auto">
+      <div style="text-align:center;max-width:720px;margin:0 auto 64px">
+        <div data-reveal data-ty="18" style="opacity:0;font:600 12px Inter,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#7C3AED;margin-bottom:20px">The studio</div>
+        <h2 data-reveal data-ty="28" style="opacity:0;margin:0;font-family:'Canela','Playfair Display',Georgia,serif;font-weight:500;font-size:clamp(34px,4.6vw,60px);line-height:1.05;letter-spacing:-0.012em;color:#1B1726">Everything a solo creator needs to move.</h2>
+        <p data-reveal data-ty="22" style="opacity:0;margin:22px auto 0;max-width:560px;font:400 18px/1.65 Inter,sans-serif;color:#5C566B">One workspace that learns your voice once, then carries it through every step — from idea to published.</p>
+      </div>
+
+      <!-- Hero feature: Creator DNA -->
+      <div data-reveal data-ty="32" style="opacity:0;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center;background:linear-gradient(135deg,#F6F2FE,#EFE9FB);border:1px solid #ECE4F8;border-radius:28px;padding:48px;margin-bottom:24px">
+        <div>
+          <div style="display:inline-flex;align-items:center;gap:9px;margin-bottom:18px"><span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6366F1,#9333EA);display:flex;align-items:center;justify-content:center"><span style="width:11px;height:11px;background:#fff;transform:rotate(45deg);border-radius:2px"></span></span><span style="font:600 11px Inter,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:#7C3AED">Creator DNA · the core</span></div>
+          <h3 style="margin:0;font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:clamp(26px,3vw,38px);line-height:1.12;color:#1B1726;letter-spacing:-0.01em">A voice profile, built from the real you.</h3>
+          <p style="margin:16px 0 0;max-width:440px;font:400 17px/1.65 Inter,sans-serif;color:#5C566B">Feed it your tone, audience, topics, boundaries and a few samples. Every idea, script and thumbnail the studio makes after that stays aligned with you — not a generic internet voice.</p>
+        </div>
+        <div style="position:relative;height:300px;border-radius:20px;overflow:hidden;border:1px solid #E7DEF6;box-shadow:0 30px 60px -34px rgba(46,16,101,.4)">
+          <image-slot id="feat-dna" style="width:100%;height:100%" shape="rect" placeholder="Veo clip — Creator DNA voice profile"></image-slot>
+        </div>
+      </div>
+
+      <!-- Feature grid -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px">
+        <div data-reveal data-ty="26" style="opacity:0;background:#FBFAFE;border:1px solid #EEE9F8;border-radius:22px;padding:30px">
+          <span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6366F1,#9333EA);display:flex;align-items:center;justify-content:center;margin-bottom:18px"><span style="width:11px;height:11px;background:#fff;transform:rotate(45deg);border-radius:2px"></span></span>
+          <div style="font:600 11px Inter,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7C3AED;margin-bottom:10px">Idea Engine</div>
+          <h4 style="margin:0;font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:22px;color:#1B1726;line-height:1.2">No more blank page</h4>
+          <p style="margin:11px 0 0;font:400 15px/1.6 Inter,sans-serif;color:#6A6379">Original angles drawn from your niche, audience and Creator DNA.</p>
+        </div>
+        <div data-reveal data-ty="26" style="opacity:0;background:#FBFAFE;border:1px solid #EEE9F8;border-radius:22px;padding:30px">
+          <span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6366F1,#9333EA);display:flex;align-items:center;justify-content:center;margin-bottom:18px"><span style="width:11px;height:11px;background:#fff;transform:rotate(45deg);border-radius:2px"></span></span>
+          <div style="font:600 11px Inter,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7C3AED;margin-bottom:10px">Script Builder</div>
+          <h4 style="margin:0;font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:22px;color:#1B1726;line-height:1.2">Scripts in your voice</h4>
+          <p style="margin:11px 0 0;font:400 15px/1.6 Inter,sans-serif;color:#6A6379">Length-aware drafts for a Short, a long-form video, or a thread.</p>
+        </div>
+        <div data-reveal data-ty="26" style="opacity:0;background:#FBFAFE;border:1px solid #EEE9F8;border-radius:22px;padding:30px">
+          <span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6366F1,#9333EA);display:flex;align-items:center;justify-content:center;margin-bottom:18px"><span style="width:11px;height:11px;background:#fff;transform:rotate(45deg);border-radius:2px"></span></span>
+          <div style="font:600 11px Inter,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7C3AED;margin-bottom:10px">Authenticity Guard</div>
+          <h4 style="margin:0;font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:22px;color:#1B1726;line-height:1.2">Publish with proof</h4>
+          <p style="margin:11px 0 0;font:400 15px/1.6 Inter,sans-serif;color:#6A6379">A score for whether it still sounds like you, is original and safe to claim.</p>
+        </div>
+        <div data-reveal data-ty="26" style="opacity:0;background:#FBFAFE;border:1px solid #EEE9F8;border-radius:22px;padding:30px">
+          <span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6366F1,#9333EA);display:flex;align-items:center;justify-content:center;margin-bottom:18px"><span style="width:11px;height:11px;background:#fff;transform:rotate(45deg);border-radius:2px"></span></span>
+          <div style="font:600 11px Inter,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7C3AED;margin-bottom:10px">Thumbnail Canvas</div>
+          <h4 style="margin:0;font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:22px;color:#1B1726;line-height:1.2">Thumbnails that click</h4>
+          <p style="margin:11px 0 0;font:400 15px/1.6 Inter,sans-serif;color:#6A6379">Fast visual drafts with low-token titles and clean PNG export.</p>
+        </div>
+        <div data-reveal data-ty="26" style="opacity:0;background:#FBFAFE;border:1px solid #EEE9F8;border-radius:22px;padding:30px">
+          <span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6366F1,#9333EA);display:flex;align-items:center;justify-content:center;margin-bottom:18px"><span style="width:11px;height:11px;background:#fff;transform:rotate(45deg);border-radius:2px"></span></span>
+          <div style="font:600 11px Inter,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7C3AED;margin-bottom:10px">YouTube + Growth</div>
+          <h4 style="margin:0;font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:22px;color:#1B1726;line-height:1.2">Grow on purpose</h4>
+          <p style="margin:11px 0 0;font:400 15px/1.6 Inter,sans-serif;color:#6A6379">Link a real channel — its stats and comments shape your next move.</p>
+        </div>
+        <div data-reveal data-ty="26" style="opacity:0;background:#FBFAFE;border:1px solid #EEE9F8;border-radius:22px;padding:30px">
+          <span style="width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#6366F1,#9333EA);display:flex;align-items:center;justify-content:center;margin-bottom:18px"><span style="width:11px;height:11px;background:#fff;transform:rotate(45deg);border-radius:2px"></span></span>
+          <div style="font:600 11px Inter,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#7C3AED;margin-bottom:10px">Community Manager</div>
+          <h4 style="margin:0;font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:22px;color:#1B1726;line-height:1.2">Reply, still as you</h4>
+          <p style="margin:11px 0 0;font:400 15px/1.6 Inter,sans-serif;color:#6A6379">Answer real comments in your voice — without living in the tab.</p>
+        </div>
+      </div>
+
+      <!-- Wide: Chrome Helper -->
+      <div data-reveal data-ty="26" style="opacity:0;display:flex;align-items:center;justify-content:space-between;gap:32px;flex-wrap:wrap;background:#0F0A1E;border-radius:24px;padding:38px 44px;margin-top:24px">
+        <div style="display:flex;align-items:center;gap:20px;max-width:680px">
+          <span style="flex:none;width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,#6366F1,#9333EA);display:flex;align-items:center;justify-content:center"><span style="width:13px;height:13px;background:#fff;transform:rotate(45deg);border-radius:2px"></span></span>
+          <div>
+            <div style="font:600 11px Inter,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#A78BFA;margin-bottom:7px">Chrome Helper</div>
+            <h4 style="margin:0;font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:24px;color:#fff;line-height:1.2">A mini creator assistant, anywhere you browse.</h4>
+            <p style="margin:9px 0 0;font:400 15px/1.6 Inter,sans-serif;color:rgba(255,255,255,.65)">Reads the page you're on to suggest titles, captions, rewrites and authenticity checks on the spot.</p>
+          </div>
+        </div>
+        <a href="#cta" style="flex:none;font:600 15px Inter,sans-serif;color:#1B1726;text-decoration:none;background:#fff;padding:13px 24px;border-radius:999px">Open install guide</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HOW IT WORKS ===================== -->
+  <section id="how" style="position:relative;padding:120px 40px;background:linear-gradient(180deg,#ffffff,#F6F3FC)">
+    <div style="max-width:1160px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:60px">
+        <div data-reveal data-ty="18" style="opacity:0;font:600 12px Inter,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#7C3AED;margin-bottom:20px">How it works</div>
+        <h2 data-reveal data-ty="28" style="opacity:0;margin:0 auto;max-width:740px;font-family:'Canela','Playfair Display',Georgia,serif;font-weight:500;font-size:clamp(32px,4.4vw,56px);line-height:1.05;letter-spacing:-0.012em;color:#1B1726">Train the voice once. Use it everywhere.</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:14px">
+        <div data-reveal data-ty="22" style="opacity:0;background:#fff;border:1px solid #EBE5F6;border-radius:18px;padding:22px 18px"><div style="font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:26px;color:#C4B5FD">01</div><div style="font:600 14px Inter,sans-serif;color:#1B1726;margin-top:10px">Build Creator DNA</div></div>
+        <div data-reveal data-ty="22" style="opacity:0;background:#fff;border:1px solid #EBE5F6;border-radius:18px;padding:22px 18px"><div style="font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:26px;color:#B69BFB">02</div><div style="font:600 14px Inter,sans-serif;color:#1B1726;margin-top:10px">Generate ideas</div></div>
+        <div data-reveal data-ty="22" style="opacity:0;background:#fff;border:1px solid #EBE5F6;border-radius:18px;padding:22px 18px"><div style="font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:26px;color:#A982F7">03</div><div style="font:600 14px Inter,sans-serif;color:#1B1726;margin-top:10px">Write scripts</div></div>
+        <div data-reveal data-ty="22" style="opacity:0;background:#fff;border:1px solid #EBE5F6;border-radius:18px;padding:22px 18px"><div style="font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:26px;color:#9B6BF2">04</div><div style="font:600 14px Inter,sans-serif;color:#1B1726;margin-top:10px">Design thumbnails</div></div>
+        <div data-reveal data-ty="22" style="opacity:0;background:#fff;border:1px solid #EBE5F6;border-radius:18px;padding:22px 18px"><div style="font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:26px;color:#8B53ED">05</div><div style="font:600 14px Inter,sans-serif;color:#1B1726;margin-top:10px">Check authenticity</div></div>
+        <div data-reveal data-ty="22" style="opacity:0;background:linear-gradient(150deg,#6366F1,#9333EA);border-radius:18px;padding:22px 18px"><div style="font-family:'Canela','Playfair Display',serif;font-weight:600;font-size:26px;color:rgba(255,255,255,.6)">06</div><div style="font:600 14px Inter,sans-serif;color:#fff;margin-top:10px">Plan &amp; grow</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:60px">
+        <div data-reveal data-ty="24" style="opacity:0"><h4 style="margin:0;font:600 16.5px Inter,sans-serif;color:#1B1726">Originality first</h4><p style="margin:10px 0 0;font:400 15px/1.62 Inter,sans-serif;color:#6A6379">It warns against copying and nudges every draft toward proof, audience fit and safer claims.</p></div>
+        <div data-reveal data-ty="24" style="opacity:0"><h4 style="margin:0;font:600 16.5px Inter,sans-serif;color:#1B1726">A real saved workspace</h4><p style="margin:10px 0 0;font:400 15px/1.62 Inter,sans-serif;color:#6A6379">Creator DNA, ideas, scripts, thumbnails and calendar — saved, not lost in a chat history.</p></div>
+        <div data-reveal data-ty="24" style="opacity:0"><h4 style="margin:0;font:600 16.5px Inter,sans-serif;color:#1B1726">Built to ship</h4><p style="margin:10px 0 0;font:400 15px/1.62 Inter,sans-serif;color:#6A6379">Generators, channel linking, community replies and a Chrome helper — one workflow, end to end.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== WHY CONTENTUS ===================== -->
+  <section id="why-contentus" style="position:relative;padding:86px 40px;background:#F6F3FC">
+    <div style="max-width:1160px;margin:0 auto;display:grid;grid-template-columns:.9fr 1.1fr;gap:32px;align-items:center">
+      <div data-reveal data-ty="24" style="opacity:0">
+        <div style="font:600 12px Inter,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#7C3AED;margin-bottom:18px">Why Contentus</div>
+        <h2 style="margin:0;font-family:'Canela','Playfair Display',Georgia,serif;font-weight:500;font-size:clamp(30px,4vw,52px);line-height:1.06;letter-spacing:-0.012em;color:#1B1726">Because faster only matters if it still sounds like you.</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+        <div data-reveal data-ty="22" style="opacity:0;background:#fff;border:1px solid #EBE5F6;border-radius:18px;padding:24px">
+          <h4 style="margin:0;font:600 16px Inter,sans-serif;color:#1B1726">Protect your voice</h4>
+          <p style="margin:10px 0 0;font:400 14.5px/1.6 Inter,sans-serif;color:#6A6379">Creator DNA keeps tone, pacing, and boundaries close to every draft.</p>
+        </div>
+        <div data-reveal data-ty="22" style="opacity:0;background:#fff;border:1px solid #EBE5F6;border-radius:18px;padding:24px">
+          <h4 style="margin:0;font:600 16px Inter,sans-serif;color:#1B1726">Avoid generic AI</h4>
+          <p style="margin:10px 0 0;font:400 14.5px/1.6 Inter,sans-serif;color:#6A6379">Authenticity checks push ideas toward personal proof and audience fit.</p>
+        </div>
+        <div data-reveal data-ty="22" style="opacity:0;background:#fff;border:1px solid #EBE5F6;border-radius:18px;padding:24px">
+          <h4 style="margin:0;font:600 16px Inter,sans-serif;color:#1B1726">Keep momentum</h4>
+          <p style="margin:10px 0 0;font:400 14.5px/1.6 Inter,sans-serif;color:#6A6379">Ideas, scripts, thumbnails, replies, and growth stay in one workflow.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FINALE ===================== -->
+  <section id="cta" style="position:relative;padding:150px 40px 110px;background:linear-gradient(180deg,#F6F3FC 0%,#EEE7FB 42%,#160F2B 100%);overflow:hidden">
+    <div aria-hidden="true" style="position:absolute;bottom:-30%;left:50%;transform:translateX(-50%);width:1200px;height:1000px;border-radius:50%;background:radial-gradient(closest-side,rgba(124,58,237,.35),transparent 70%);pointer-events:none"></div>
+    <div style="position:relative;max-width:920px;margin:0 auto;text-align:center">
+      <div data-reveal data-ty="18" style="opacity:0;font:600 12px Inter,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:#7C3AED;margin-bottom:26px">Your turn</div>
+      <h2 data-reveal data-ty="32" style="opacity:0;margin:0;font-family:'Canela','Playfair Display',Georgia,serif;font-weight:500;font-size:clamp(40px,6vw,82px);line-height:1.02;letter-spacing:-0.015em;color:#1B1726">Now, I can do it.<br><span style="font-style:italic;background:linear-gradient(120deg,#6366F1,#9333EA);-webkit-background-clip:text;background-clip:text;color:transparent">And so can you.</span></h2>
+      <p data-reveal data-ty="22" style="opacity:0;max-width:540px;margin:28px auto 0;font:400 19px/1.65 Inter,sans-serif;color:#5C566B">The kid who wanted to make a video finally has a studio that sounds like them. Yours is one click away.</p>
+      <div data-reveal data-ty="22" style="opacity:0;margin-top:40px">
+        <a href="index.html#/login" style="display:inline-flex;align-items:center;gap:9px;font:600 17px Inter,sans-serif;color:#fff;text-decoration:none;background:linear-gradient(135deg,#6366F1 0%,#7C3AED 52%,#9333EA 100%);padding:18px 36px;border-radius:999px;box-shadow:0 18px 44px -12px rgba(124,58,237,.7)">Open your studio →</a>
+      </div>
+    </div>
+    <footer style="position:relative;max-width:1160px;margin:120px auto 0;padding-top:34px;border-top:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:11px">
+        <img src="contentus.jpg" alt="" style="width:30px;height:30px;border-radius:9px;object-fit:cover"/>
+        <div><div style="font:600 16px Inter,sans-serif;color:#fff;letter-spacing:-0.01em">Contentus</div><div style="font:400 12px Inter,sans-serif;color:rgba(255,255,255,.5)">Creator DNA OS</div></div>
+      </div>
+      <div style="display:flex;gap:28px">
+        <a href="#story" style="font:500 14px Inter,sans-serif;color:rgba(255,255,255,.7);text-decoration:none">The story</a>
+        <a href="#features" style="font:500 14px Inter,sans-serif;color:rgba(255,255,255,.7);text-decoration:none">Features</a>
+        <a href="#how" style="font:500 14px Inter,sans-serif;color:rgba(255,255,255,.7);text-decoration:none">How it works</a>
+      </div>
+      <div style="font:400 13px Inter,sans-serif;color:rgba(255,255,255,.4)">© 2026 Contentus</div>
+    </footer>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  componentDidMount() {
+    this._tick = this._tick.bind(this);
+    this._q = false;
+    this._raf = () => {
+      if (!this._q) { this._q = true; requestAnimationFrame(() => { this._tick(); this._q = false; }); }
+    };
+    // The real scroller may be an ancestor div, not window — capture-phase
+    // catches scroll from any descendant scroller.
+    document.addEventListener('scroll', this._raf, { passive: true, capture: true });
+    window.addEventListener('scroll', this._raf, { passive: true });
+    window.addEventListener('resize', this._raf, { passive: true });
+    this._tick();
+    setTimeout(this._tick, 60);
+    setTimeout(this._tick, 300);
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener('scroll', this._raf, { capture: true });
+    window.removeEventListener('scroll', this._raf);
+    window.removeEventListener('resize', this._raf);
+  }
+
+  _ss(a, b, x) {
+    const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  }
+
+  // Drive opacity + translate directly from scroll position — no CSS
+  // transitions, so nothing can get "stuck" if frames are throttled.
+  _set(el, e, ty) {
+    el.style.opacity = e.toFixed(3);
+    el.style.transform = e >= 0.999 ? 'none' : 'translateY(' + ((1 - e) * ty).toFixed(1) + 'px)';
+  }
+
+  _tick() {
+    const vh = window.innerHeight;
+    const root = document.querySelector('[data-root]');
+    const rootR = root ? root.getBoundingClientRect() : null;
+    const scrolled = rootR ? -rootR.top : 0;
+
+    // Nav background on scroll
+    const nav = document.querySelector('[data-nav]');
+    if (nav) {
+      const on = scrolled > 36;
+      nav.style.background = on ? 'rgba(255,255,255,0.82)' : 'rgba(255,255,255,0)';
+      nav.style.borderColor = on ? '#ECE6F6' : 'transparent';
+      nav.style.backdropFilter = on ? 'saturate(180%) blur(18px)' : 'none';
+      nav.style.webkitBackdropFilter = on ? 'saturate(180%) blur(18px)' : 'none';
+      nav.style.boxShadow = on ? '0 1px 24px -16px rgba(46,16,101,.5)' : 'none';
+    }
+
+    // Progress bar
+    const max = rootR ? (rootR.height - vh) : 0;
+    const p = max > 0 ? Math.max(0, Math.min(1, scrolled / max)) : 0;
+    const bar = document.querySelector('[data-progress]');
+    if (bar) bar.style.transform = 'scaleX(' + p.toFixed(4) + ')';
+
+    // Pinned, scrubbed chapters
+    document.querySelectorAll('[data-chapter]').forEach(sec => {
+      const r = sec.getBoundingClientRect();
+      const total = r.height - vh;
+      let prog = total > 0 ? (-r.top) / total : (r.top <= 0 ? 1 : 0);
+      prog = Math.max(0, Math.min(1, prog));
+      // Cross-fade whole scenes as the single pin scrubs from one to the next
+      sec.querySelectorAll('[data-scene]').forEach(scene => {
+        const a = parseFloat(scene.dataset.a), b = parseFloat(scene.dataset.b);
+        const c = parseFloat(scene.dataset.c), d = parseFloat(scene.dataset.d);
+        const vis = this._ss(a, b, prog) * (1 - this._ss(c, d, prog));
+        scene.style.opacity = vis.toFixed(3);
+        scene.style.pointerEvents = vis > 0.05 ? 'auto' : 'none';
+      });
+      sec.querySelectorAll('[data-step]').forEach(step => {
+        const start = parseFloat(step.dataset.step) || 0;
+        const span = parseFloat(step.dataset.span) || 0.16;
+        const e = this._ss(start, start + span, prog);
+        const ty = step.dataset.ty !== undefined ? parseFloat(step.dataset.ty) : 30;
+        this._set(step, e, ty);
+      });
+      sec.querySelectorAll('[data-glow]').forEach(glow => {
+        glow.style.transform = 'translateX(-50%) scale(' + (0.85 + prog * 0.4).toFixed(3) + ')';
+      });
+    });
+
+    // Non-pinned reveals — scrubbed from each element's viewport position
+    document.querySelectorAll('[data-reveal]').forEach(el => {
+      const r = el.getBoundingClientRect();
+      const lp = Math.max(0, Math.min(1, (vh * 0.94 - r.top) / (vh * 0.32)));
+      const e = lp * lp * (3 - 2 * lp);
+      const ty = el.dataset.ty !== undefined ? parseFloat(el.dataset.ty) : 26;
+      this._set(el, e, ty);
+    });
+  }
+}
+</script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 {
   "name": "contentus",
   "version": "1.0.0",
-  "description": "Contentus Creator DNA AI operating system with Supabase auth, Gemini tools, YouTube linking, and Chrome extension.",
+  "description": "Contentus Creator DNA AI operating system with Supabase auth, Featherless tools, Gemini image generation, YouTube linking, and Chrome extension.",
   "type": "module",
   "scripts": {
     "start": "node server.js",

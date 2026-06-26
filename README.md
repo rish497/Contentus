@@ -1,6 +1,6 @@
 # Contentus
 
-Contentus is a Creator DNA operating system for creators. It includes a cursor-reactive landing page, Supabase-backed authentication and saved state, Gemini-powered creator tools, public YouTube channel/comment linking, a thumbnail designer, and a Manifest V3 Chrome helper.
+Contentus is a Creator DNA operating system for creators. It includes a cursor-reactive landing page, Supabase-backed authentication and saved state, Featherless-powered creator tools, Gemini thumbnail image generation, public YouTube channel/comment linking, a thumbnail designer, and a Manifest V3 Chrome helper.
 
 ## Run locally
 
@@ -58,7 +58,8 @@ This project deploys as a Render Web Service using `render.yaml`.
 Use products with free API-key access or free tiers:
 
 - Supabase for auth/database
-- Google Gemini API for AI generation
+- Featherless API for text/JSON AI generation
+- Google Gemini API for thumbnail image generation
 - YouTube Data API for public channel/video/comment data
 - Google OAuth credentials for future private YouTube Analytics access
 - Google OAuth redirect URI for Calendar read/write and approved YouTube reply posting
@@ -66,12 +67,14 @@ Use products with free API-key access or free tiers:
 
 Never expose Supabase secret/service-role keys in frontend code. Use the publishable/anon key only with Row Level Security configured.
 
-For Render deployment, add the same environment variables in the Render Dashboard because local `.env` files are not uploaded as production secrets. In particular, Google Calendar and approved YouTube replies need these Render environment variables:
+For Render deployment, add the same environment variables in the Render Dashboard because local `.env` files are not uploaded as production secrets. At minimum, the live integrations use these Render environment variables:
 
 ```text
 GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI
+FEATHERLESS_API_KEY
+GEMINI_API_KEY
 SESSION_SECRET
 ```
 
