@@ -203,7 +203,12 @@ function saveStateLocalOnly() {
 
 function loadSession() {
   try {
-    return JSON.parse(localStorage.getItem(AUTH_KEY) || "null");
+    const session = JSON.parse(localStorage.getItem(AUTH_KEY) || "null");
+    if (session?.access_token && session.access_token.length > 6000) {
+      localStorage.removeItem(AUTH_KEY);
+      return null;
+    }
+    return session;
   } catch {
     return null;
   }
@@ -259,8 +264,12 @@ async function apiJson(path, options = {}) {
   try {
     data = text ? JSON.parse(text) : {};
   } catch {
-    data = { raw: text };
+    data = {
+      raw: text,
+      message: text ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 220) : `Request failed with status ${response.status}`,
+    };
   }
+  if (!response.ok && !data.message && !data.error) data.message = `Request failed with status ${response.status}.`;
   return { ok: response.ok, status: response.status, data };
 }
 
@@ -3890,11 +3899,22 @@ async function handlePostReplyV4(button) {
 }
 
 async function handleGoogleConnectV4(button) {
+  if (!authSession?.access_token) {
+    toast("Sign in to Contentus first, then connect Google.");
+    routeTo("/login");
+    return;
+  }
+
   await withBusy(button, "Connecting...", async () => {
+    if (authSession?.refresh_token) await tryRefreshSession();
     const scope = button.dataset.scope || "all";
     const result = await apiJson(`/api/google/oauth/start?scope=${encodeURIComponent(scope)}`, { auth: true });
     if (!result.ok || !result.data.authUrl) {
-      toast(result.data.message || result.data.error || "Google OAuth is not configured.");
+      const message = result.status === 401
+        ? "Your Contentus session expired. Sign in again, then connect Google."
+        : (result.data.message || result.data.error || `Google OAuth start failed with status ${result.status}.`);
+      toast(message);
+      if (result.status === 401) routeTo("/login");
       return;
     }
     location.href = result.data.authUrl;

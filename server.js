@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 loadEnvFile();
 
 const PORT = Number(process.env.PORT || 3000);
+const WORKSPACE_STATE_DIR = path.join(__dirname, ".contentus-state");
+const WORKSPACE_STATE_FILE = path.join(WORKSPACE_STATE_DIR, "workspaces.json");
 const SUPABASE_URL = normalizeSupabaseProjectUrl(trimEnv("SUPABASE_URL"));
 const SUPABASE_ANON_KEY = trimEnv("SUPABASE_ANON_KEY");
 const GEMINI_API_KEY = trimEnv("GEMINI_API_KEY");
@@ -71,10 +73,13 @@ function configured(value) {
 }
 
 function integrationStatus() {
+  const googleClient = configured(GOOGLE_CLIENT_ID) && configured(GOOGLE_CLIENT_SECRET);
   return {
     supabase: configured(SUPABASE_URL) && configured(SUPABASE_ANON_KEY),
     gemini: configured(GEMINI_API_KEY),
-    googleOAuth: configured(GOOGLE_CLIENT_ID) && configured(GOOGLE_CLIENT_SECRET),
+    googleOAuth: googleClient && configured(GOOGLE_REDIRECT_URI),
+    googleOAuthClient: googleClient,
+    googleRedirectUri: configured(GOOGLE_REDIRECT_URI),
     youtubeData: configured(YOUTUBE_DATA_API_KEY),
     firebase: configured(FIREBASE_API_KEY),
     sessionSecret: configured(SESSION_SECRET),
@@ -156,7 +161,7 @@ async function handleApi(request, response, url) {
       app: "Contentus",
       integrations: integrationStatus(),
       authProvider: integrationStatus().supabase ? "supabase" : "not-configured",
-      aiProvider: integrationStatus().gemini ? "gemini" : "local-fallback",
+      aiProvider: integrationStatus().gemini ? "gemini" : "not-configured",
       youtubeProvider: integrationStatus().youtubeData ? "youtube-data-api" : "not-configured",
     });
     return;
@@ -169,9 +174,12 @@ async function handleApi(request, response, url) {
       password: body.password,
       data: {
         name: body.name || "",
-        contentus_state: body.contentusState || null,
       },
     });
+    if (result.status < 400 && body.contentusState) {
+      const user = result.payload.user || result.payload.session?.user;
+      if (user?.id) await saveWorkspaceState(user.id, body.contentusState);
+    }
     sendJson(response, result.status, result.payload);
     return;
   }
@@ -210,7 +218,7 @@ async function handleApi(request, response, url) {
     }
     sendJson(response, 200, {
       user: sanitizeUser(result.payload),
-      contentusState: result.payload.user_metadata?.contentus_state || null,
+      contentusState: await loadWorkspaceState(result.payload.id),
     });
     return;
   }
@@ -645,11 +653,16 @@ function googleRedirectUri(request) {
 
 function requireGoogleOAuthConfig(request) {
   if (integrationStatus().googleOAuth) return null;
+  const missing = [];
+  if (!configured(GOOGLE_CLIENT_ID)) missing.push("GOOGLE_CLIENT_ID");
+  if (!configured(GOOGLE_CLIENT_SECRET)) missing.push("GOOGLE_CLIENT_SECRET");
+  if (!configured(GOOGLE_REDIRECT_URI)) missing.push("GOOGLE_REDIRECT_URI");
   return {
     status: 501,
     payload: {
       error: "Google OAuth is not configured",
-      message: "Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI, and SESSION_SECRET in .env and Render.",
+      message: `Set ${missing.join(", ")} in .env and Render, then restart the server.`,
+      missing,
     },
   };
 }
@@ -1821,7 +1834,10 @@ async function supabasePasswordLogin(email, password) {
   });
 
   if (result.status < 400 && result.payload.user) {
-    result.payload.user = sanitizeUser(result.payload.user);
+    const migrated = await migrateMetadataWorkspaceState(result.payload);
+    const payload = migrated || result.payload;
+    payload.user = sanitizeUser(payload.user);
+    return { status: result.status, payload };
   }
   return result;
 }
@@ -1836,7 +1852,10 @@ async function supabaseRefresh(refreshToken) {
   });
 
   if (result.status < 400 && result.payload.user) {
-    result.payload.user = sanitizeUser(result.payload.user);
+    const migrated = await migrateMetadataWorkspaceState(result.payload);
+    const payload = migrated || result.payload;
+    payload.user = sanitizeUser(payload.user);
+    return { status: result.status, payload };
   }
   return result;
 }
@@ -1877,28 +1896,18 @@ async function supabaseUpdateUserState(token, contentusState) {
   if (!token) return { status: 401, payload: { error: "Missing access token." } };
   if (!contentusState) return { status: 400, payload: { error: "contentusState is required." } };
 
-  const result = await supabaseFetch("/user", {
-    method: "PUT",
-    headers: authHeaders(token),
-    body: JSON.stringify({
-      data: {
-        contentus_state: contentusState,
-        contentus_saved_at: new Date().toISOString(),
-      },
-    }),
-  });
-
-  if (result.status < 400) {
-    return {
-      status: result.status,
-      payload: {
-        ok: true,
-        user: sanitizeUser(result.payload),
-        savedAt: result.payload.user_metadata?.contentus_saved_at,
-      },
-    };
-  }
-  return result;
+  const user = await supabaseUserRaw(token);
+  if (user.status >= 400) return user;
+  const savedAt = new Date().toISOString();
+  await saveWorkspaceState(user.payload.id, { ...contentusState, contentus_saved_at: savedAt });
+  return {
+    status: 200,
+    payload: {
+      ok: true,
+      user: sanitizeUser(user.payload),
+      savedAt,
+    },
+  };
 }
 
 async function supabaseUpdateUserMetadata(token, data = {}) {
@@ -1914,9 +1923,83 @@ async function supabaseUpdateUserMetadata(token, data = {}) {
   return result;
 }
 
+async function migrateMetadataWorkspaceState(sessionPayload = {}) {
+  const user = sessionPayload.user;
+  const metadata = user?.user_metadata || {};
+  if (!user?.id || !metadata.contentus_state) return null;
+
+  await saveWorkspaceState(user.id, {
+    ...metadata.contentus_state,
+    contentus_saved_at: metadata.contentus_saved_at || new Date().toISOString(),
+  });
+
+  const clearResult = await supabaseFetch("/user", {
+    method: "PUT",
+    headers: authHeaders(sessionPayload.access_token),
+    body: JSON.stringify({
+      data: {
+        contentus_state: null,
+        contentus_saved_at: null,
+      },
+    }),
+  });
+
+  if (clearResult.status >= 400 || !sessionPayload.refresh_token) {
+    const cleanedUser = {
+      ...user,
+      user_metadata: {
+        ...metadata,
+        contentus_state: undefined,
+        contentus_saved_at: undefined,
+      },
+    };
+    return { ...sessionPayload, user: cleanedUser };
+  }
+
+  const refreshed = await supabaseFetch("/token?grant_type=refresh_token", {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ refresh_token: sessionPayload.refresh_token }),
+  });
+
+  if (refreshed.status < 400 && refreshed.payload.user) return refreshed.payload;
+  return { ...sessionPayload, user: clearResult.payload || user };
+}
+
+async function readWorkspaceStore() {
+  try {
+    return JSON.parse(await readFile(WORKSPACE_STATE_FILE, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+async function writeWorkspaceStore(store) {
+  await mkdir(WORKSPACE_STATE_DIR, { recursive: true });
+  await writeFile(WORKSPACE_STATE_FILE, JSON.stringify(store, null, 2));
+}
+
+async function saveWorkspaceState(userId, contentusState) {
+  if (!userId) return;
+  const store = await readWorkspaceStore();
+  store[userId] = {
+    contentusState,
+    savedAt: new Date().toISOString(),
+  };
+  await writeWorkspaceStore(store);
+}
+
+async function loadWorkspaceState(userId) {
+  if (!userId) return null;
+  const store = await readWorkspaceStore();
+  return store[userId]?.contentusState || null;
+}
+
 function sanitizeUser(user = {}) {
   const metadata = { ...(user.user_metadata || {}) };
   if (metadata.google_oauth) metadata.google_oauth = googlePublicState(metadata.google_oauth);
+  delete metadata.contentus_state;
+  delete metadata.contentus_saved_at;
   return {
     id: user.id,
     email: user.email,
