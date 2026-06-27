@@ -36,6 +36,7 @@ Creator DNA, ideas, scripts, calendar items, channel data, comments, and saved i
 - AI Idea Engine
 - Script and Story Builder with length-aware generation and PDF export
 - AI Ad and Short Film Studio
+- Voiceover Studio that narrates scripts with ElevenLabs text-to-speech
 - Thumbnail Designer with canvas generation and low-token title suggestions
 - Authenticity Guard
 - YouTube + Growth page using the YouTube Data API for public channel/video stats
@@ -60,6 +61,7 @@ Use products with free API-key access or free tiers:
 - Supabase for auth/database
 - Featherless API for text/JSON AI generation
 - Google Gemini API for thumbnail image generation
+- ElevenLabs API for voiceover/text-to-speech narration
 - YouTube Data API for public channel/video/comment data
 - Google OAuth credentials for future private YouTube Analytics access
 - Google OAuth redirect URI for Calendar read/write and approved YouTube reply posting
@@ -75,6 +77,7 @@ GOOGLE_CLIENT_SECRET
 GOOGLE_REDIRECT_URI
 FEATHERLESS_API_KEY
 GEMINI_API_KEY
+ELEVENLABS_API_KEY
 SESSION_SECRET
 ```
 

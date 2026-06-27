@@ -15,9 +15,18 @@ const SUPABASE_URL = normalizeSupabaseProjectUrl(trimEnv("SUPABASE_URL"));
 const SUPABASE_ANON_KEY = trimEnv("SUPABASE_ANON_KEY");
 const FEATHERLESS_API_KEY = trimEnv("FEATHERLESS_API_KEY");
 const FEATHERLESS_BASE_URL = (trimEnv("FEATHERLESS_BASE_URL") || "https://api.featherless.ai/v1").replace(/\/+$/, "");
-const FEATHERLESS_MODEL = trimEnv("FEATHERLESS_MODEL") || "meta-llama/Meta-Llama-3.1-8B-Instruct";
+const FEATHERLESS_MODEL = trimEnv("FEATHERLESS_MODEL") || "Qwen/Qwen2.5-72B-Instruct";
 const FEATHERLESS_VISION_MODEL = trimEnv("FEATHERLESS_VISION_MODEL") || FEATHERLESS_MODEL;
 const GEMINI_API_KEY = trimEnv("GEMINI_API_KEY");
+const ELEVENLABS_API_KEY = trimEnv("ELEVENLABS_API_KEY");
+const ELEVENLABS_BASE_URL = (trimEnv("ELEVENLABS_BASE_URL") || "https://api.elevenlabs.io/v1").replace(/\/+$/, "");
+const ELEVENLABS_MODEL = trimEnv("ELEVENLABS_MODEL") || "eleven_multilingual_v2";
+const ELEVENLABS_DEFAULT_VOICE = trimEnv("ELEVENLABS_VOICE_ID") || "21m00Tcm4TlvDq8ikWAM"; // Rachel (ElevenLabs premade)
+const ELEVENLABS_MAX_CHARS = Number(trimEnv("ELEVENLABS_MAX_CHARS") || 5000);
+const IMAGE_PROVIDER = (trimEnv("IMAGE_PROVIDER") || "pollinations").toLowerCase();
+const POLLINATIONS_BASE_URL = (trimEnv("POLLINATIONS_BASE_URL") || "https://image.pollinations.ai").replace(/\/+$/, "");
+const POLLINATIONS_MODEL = trimEnv("POLLINATIONS_MODEL") || "flux";
+const POLLINATIONS_API_KEY = trimEnv("POLLINATIONS_API_KEY");
 const GOOGLE_CLIENT_ID = trimEnv("GOOGLE_CLIENT_ID");
 const GOOGLE_CLIENT_SECRET = trimEnv("GOOGLE_CLIENT_SECRET");
 const GOOGLE_REDIRECT_URI = trimEnv("GOOGLE_REDIRECT_URI");
@@ -82,6 +91,9 @@ function integrationStatus() {
     supabase: configured(SUPABASE_URL) && configured(SUPABASE_ANON_KEY),
     featherless: configured(FEATHERLESS_API_KEY),
     gemini: configured(GEMINI_API_KEY),
+    elevenlabs: configured(ELEVENLABS_API_KEY),
+    pollinations: true,
+    imageProvider: IMAGE_PROVIDER,
     googleOAuth: googleClient && configured(GOOGLE_REDIRECT_URI),
     googleOAuthClient: googleClient,
     googleRedirectUri: configured(GOOGLE_REDIRECT_URI),
@@ -355,6 +367,18 @@ async function handleApi(request, response, url) {
   if (request.method === "POST" && url.pathname === "/api/ai/thumbnail-image") {
     const result = await generateThumbnailImage(body);
     sendJson(response, 200, result);
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/ai/voices") {
+    const result = await listElevenLabsVoices();
+    sendJson(response, result.status, result.payload);
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ai/voiceover") {
+    const result = await generateVoiceoverWithAi(body);
+    sendJson(response, result.status, result.payload);
     return;
   }
 
@@ -1183,15 +1207,60 @@ async function generateThumbnailImage(body = {}) {
   const palette = body.palette || "high-contrast cyan, coral, gold on near-black";
   const imagePrompt = `A bold, high-contrast 16:9 YouTube thumbnail background, ${style} style, color palette: ${palette}. Cinematic lighting, strong focal subject, lots of negative space on the left for large headline text, no text rendered in the image, no watermark, photoreal but punchy. Theme: ${title}. ${subtitle ? `Secondary idea: ${subtitle}.` : ""} ${body.dna?.visual ? `Match this creator's visual style: ${body.dna.visual}.` : ""}`.trim();
 
-  const image = await callGeminiImage(imagePrompt);
+  const image = await generateImage(imagePrompt);
   if (!image.data) {
     return {
       image: null,
       prompt: imagePrompt,
-      note: image.warning || "Image generation is unavailable (billing-enabled Gemini image model required). Use the local canvas designer meanwhile.",
+      note: image.warning || "Image generation is unavailable right now. Use the local canvas designer meanwhile.",
     };
   }
-  return { image, prompt: imagePrompt, note: "" };
+  return { image, prompt: imagePrompt, note: "", provider: image.provider };
+}
+
+// Picks the image provider (default Pollinations, keyless) and falls back to the
+// other provider if the preferred one returns no image.
+async function generateImage(prompt) {
+  const order = IMAGE_PROVIDER === "gemini" ? ["gemini", "pollinations"] : ["pollinations", "gemini"];
+  let lastWarning = "";
+  for (const provider of order) {
+    const result = provider === "gemini" ? await callGeminiImage(prompt) : await callPollinationsImage(prompt);
+    if (result.data) return { ...result, provider };
+    lastWarning = result.warning || lastWarning;
+  }
+  return { warning: lastWarning || "No image provider returned data." };
+}
+
+// Pollinations is free and keyless. An optional token lifts anonymous rate limits.
+async function callPollinationsImage(prompt) {
+  const params = new URLSearchParams({
+    width: "1280",
+    height: "720",
+    model: POLLINATIONS_MODEL,
+    nologo: "true",
+    referrer: "contentus",
+    seed: String(Math.floor(Math.random() * 1_000_000)),
+  });
+  const url = `${POLLINATIONS_BASE_URL}/prompt/${encodeURIComponent(prompt)}?${params.toString()}`;
+  const headers = {};
+  if (configured(POLLINATIONS_API_KEY)) headers.Authorization = `Bearer ${POLLINATIONS_API_KEY}`;
+  try {
+    const result = await fetch(url, { headers, signal: AbortSignal.timeout(60_000) });
+    if (!result.ok) {
+      const detail = await result.text().catch(() => "");
+      return { warning: detail?.slice(0, 200) || `Pollinations request failed with ${result.status}` };
+    }
+    const mimeType = result.headers.get("content-type") || "image/jpeg";
+    if (!mimeType.startsWith("image/")) {
+      const detail = await result.text().catch(() => "");
+      return { warning: detail?.slice(0, 200) || "Pollinations returned a non-image response." };
+    }
+    const buffer = Buffer.from(await result.arrayBuffer());
+    if (!buffer.length) return { warning: "Pollinations returned no image data." };
+    return { data: buffer.toString("base64"), mimeType };
+  } catch (error) {
+    return { warning: error.name === "TimeoutError" ? "Pollinations image timed out." : error.message };
+  }
 }
 
 async function callGeminiImage(prompt) {
@@ -1220,6 +1289,124 @@ async function callGeminiImage(prompt) {
   } catch (error) {
     return { warning: error.message };
   }
+}
+
+// Lists the account's ElevenLabs voices (premade + cloned) so the studio dropdown
+// reflects the real voices the creator has, not a hardcoded list.
+async function listElevenLabsVoices() {
+  if (!configured(ELEVENLABS_API_KEY)) {
+    return {
+      status: 200,
+      payload: {
+        configured: false,
+        voices: [],
+        defaultVoiceId: ELEVENLABS_DEFAULT_VOICE,
+        message: "Set ELEVENLABS_API_KEY in .env and restart to load your ElevenLabs voices.",
+      },
+    };
+  }
+  try {
+    const result = await fetch(`${ELEVENLABS_BASE_URL}/voices`, {
+      headers: { "xi-api-key": ELEVENLABS_API_KEY },
+      signal: AbortSignal.timeout(20_000),
+    });
+    const text = await result.text();
+    const payload = text ? JSON.parse(text) : {};
+    if (!result.ok) {
+      return { status: result.status, payload: { configured: true, voices: [], error: payload.detail?.message || payload.detail || `ElevenLabs voices request failed with ${result.status}` } };
+    }
+    const voices = normalizeArray(payload.voices).map((voice) => ({
+      voiceId: voice.voice_id,
+      name: voice.name || "Voice",
+      category: voice.category || "",
+      previewUrl: voice.preview_url || "",
+    })).filter((voice) => voice.voiceId);
+    return {
+      status: 200,
+      payload: { configured: true, voices, defaultVoiceId: ELEVENLABS_DEFAULT_VOICE },
+    };
+  } catch (error) {
+    return { status: 502, payload: { configured: true, voices: [], error: error.name === "TimeoutError" ? "ElevenLabs voices request timed out." : error.message } };
+  }
+}
+
+// Renders text to a short voiceover with ElevenLabs Text-to-Speech and returns the
+// audio as base64 so it travels through the existing JSON API, like generated images.
+async function generateVoiceoverWithAi(body = {}) {
+  const rawText = String(body.text || "").trim();
+  if (!rawText) {
+    return { status: 400, payload: { error: "Add a script or some text to narrate." } };
+  }
+  if (!configured(ELEVENLABS_API_KEY)) {
+    return {
+      status: 501,
+      payload: {
+        error: "ElevenLabs is not configured",
+        message: "Set ELEVENLABS_API_KEY in .env and Render, then restart the server.",
+      },
+    };
+  }
+
+  const truncated = rawText.length > ELEVENLABS_MAX_CHARS;
+  const text = truncated ? rawText.slice(0, ELEVENLABS_MAX_CHARS) : rawText;
+  const voiceId = String(body.voiceId || ELEVENLABS_DEFAULT_VOICE).trim() || ELEVENLABS_DEFAULT_VOICE;
+  const modelId = String(body.modelId || ELEVENLABS_MODEL).trim() || ELEVENLABS_MODEL;
+  const outputFormat = String(body.outputFormat || "mp3_44100_128").trim();
+  const voiceSettings = {
+    stability: clampNumber(body.stability, 0, 1, 0.5),
+    similarity_boost: clampNumber(body.similarityBoost, 0, 1, 0.75),
+    style: clampNumber(body.style, 0, 1, 0),
+    use_speaker_boost: body.speakerBoost !== false,
+    speed: clampNumber(body.speed, 0.7, 1.2, 1),
+  };
+
+  try {
+    const result = await fetch(`${ELEVENLABS_BASE_URL}/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${encodeURIComponent(outputFormat)}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": ELEVENLABS_API_KEY,
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+      },
+      body: JSON.stringify({ text, model_id: modelId, voice_settings: voiceSettings }),
+      signal: AbortSignal.timeout(120_000),
+    });
+
+    if (!result.ok) {
+      const detail = await result.text().catch(() => "");
+      let message = `ElevenLabs request failed with ${result.status}`;
+      try {
+        const parsed = JSON.parse(detail);
+        message = parsed.detail?.message || parsed.detail || message;
+      } catch {
+        if (detail) message = detail.slice(0, 200);
+      }
+      return { status: result.status, payload: { error: "Voiceover generation failed", message } };
+    }
+
+    const buffer = Buffer.from(await result.arrayBuffer());
+    if (!buffer.length) {
+      return { status: 502, payload: { error: "ElevenLabs returned no audio." } };
+    }
+    return {
+      status: 200,
+      payload: {
+        audio: { data: buffer.toString("base64"), mimeType: "audio/mpeg" },
+        voiceId,
+        modelId,
+        characters: text.length,
+        note: truncated ? `Text was trimmed to ${ELEVENLABS_MAX_CHARS} characters for this voiceover. Split longer scripts into parts.` : "",
+      },
+    };
+  } catch (error) {
+    return { status: 502, payload: { error: "Voiceover generation failed", message: error.name === "TimeoutError" ? "ElevenLabs request timed out." : error.message } };
+  }
+}
+
+function clampNumber(value, min, max, fallback) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.min(max, Math.max(min, num));
 }
 
 async function fetchYouTubeChannel(input = "") {

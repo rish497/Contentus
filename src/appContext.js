@@ -27,6 +27,7 @@ export const defaultState = {
   ideas: [],
   scripts: [],
   thumbnails: [],
+  voiceovers: [],
   trends: null,
   videoChecks: [],
   calendar: [],

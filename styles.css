@@ -20,6 +20,8 @@
   --radius: 8px;
   --max: 1180px;
   --sidebar: 286px;
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Canela", "Canela Text", "Playfair Display", Georgia, serif;
 }
 
 * {
@@ -40,8 +42,7 @@ body {
     radial-gradient(circle at 20% 0%, rgba(94, 232, 242, 0.12), transparent 36%),
     var(--bg);
   color: var(--text);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
   line-height: 1.5;
   text-rendering: optimizeLegibility;
 }
@@ -115,8 +116,33 @@ svg {
   display: grid;
   place-items: center;
   align-content: center;
-  gap: 1rem;
-  color: var(--muted);
+  gap: 1.15rem;
+  color: #c8bbe9;
+  background:
+    radial-gradient(900px 600px at 50% 0%, rgba(147, 51, 234, 0.22), transparent 60%),
+    linear-gradient(180deg, #160a2e 0%, #120726 52%, #0d0520 100%);
+}
+
+.boot-logo {
+  width: 4.6rem;
+  height: 4.6rem;
+  border-radius: 16px;
+  object-fit: cover;
+  box-shadow: 0 22px 50px -20px rgba(124, 58, 237, 0.85);
+  animation: boot-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes boot-pulse {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(-6px); opacity: 0.82; }
+}
+
+.brand-logo {
+  width: 2.35rem;
+  height: 2.35rem;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  object-fit: cover;
 }
 
 .dna-logo {
@@ -893,6 +919,14 @@ h3 {
   font-size: clamp(2.2rem, 4vw, 3.6rem);
   line-height: 1;
   font-weight: 950;
+}
+
+/* Placeholder/word values (e.g. "Not built", "No scripts") shouldn't
+   render at the big numeric size. */
+.metric-value.metric-value-text {
+  font-size: clamp(0.92rem, 1.3vw, 1.08rem);
+  line-height: 1.2;
+  font-weight: 700;
 }
 
 .trend {
@@ -1910,6 +1944,37 @@ select option {
   align-items: start;
 }
 
+/* Creator DNA: full-width horizontal input form, generated DNA below it */
+.dna-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+.dna-form-wide .form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* Compact input boxes - much smaller by default, grow if the user types */
+.dna-form-wide textarea {
+  min-height: 2.9rem;
+}
+
+.dna-form-wide .form-field.full textarea {
+  min-height: 4.25rem;
+}
+
+@media (max-width: 900px) {
+  .dna-form-wide .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .dna-form-wide .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .script-builder-layout {
   grid-template-columns: minmax(280px, 0.34fr) minmax(0, 1fr);
 }
@@ -2047,6 +2112,33 @@ select option {
 
 .mini-output {
   min-height: 7rem;
+}
+
+.range-field .range-value {
+  float: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted, rgba(255,255,255,0.6));
+  font-weight: 600;
+}
+
+.range-field input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent, #5eead4);
+  cursor: pointer;
+}
+
+.voiceover-player {
+  width: 100%;
+  margin: 0.25rem 0 0.75rem;
+}
+
+.voiceover-meta {
+  font-size: 0.85rem;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.voiceover-card .action-row {
+  margin-bottom: 0.5rem;
 }
 
 .authenticity-grid {
@@ -3234,4 +3326,344 @@ select option {
     border-right: none;
     border-bottom: 1px solid var(--line);
   }
+}
+
+/* Landing-matched sign in */
+.restored-auth {
+  position: relative;
+  min-height: 100vh;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
+  overflow: hidden;
+  padding: clamp(5.5rem, 8vw, 7.5rem) clamp(1.25rem, 5vw, 4.5rem) clamp(2.5rem, 5vw, 4rem);
+  background:
+    linear-gradient(135deg, rgba(99, 102, 241, 0.09), transparent 42%),
+    linear-gradient(180deg, #F3EFFC 0%, #F8F5FD 52%, #ffffff 100%);
+  color: #1B1726;
+}
+
+.restored-auth .auth-copy,
+.restored-auth .auth-card {
+  position: relative;
+  z-index: 1;
+}
+
+.auth-brand-link {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.72rem;
+  margin-bottom: clamp(2.2rem, 5vw, 4rem);
+  color: #1B1726;
+  text-decoration: none;
+}
+
+.auth-brand-logo {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 10px;
+  object-fit: cover;
+  box-shadow: 0 14px 28px -18px rgba(124, 58, 237, 0.8);
+}
+
+.auth-brand-link span {
+  display: grid;
+  line-height: 1.05;
+}
+
+.auth-brand-link strong {
+  font-family: var(--font-sans);
+  font-size: 1.18rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.auth-brand-link small {
+  color: #7A728A;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.restored-auth .eyebrow {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.4rem;
+  padding: 0.44rem 0.9rem;
+  border: 1px solid #E4DBF7;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.7);
+  color: #6D28D9;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+}
+
+.restored-auth .auth-layout h1,
+.restored-auth h1 {
+  max-width: 720px;
+  color: #1B1726;
+  font-family: var(--font-display);
+  font-size: clamp(2.85rem, 6vw, 5.8rem);
+  font-weight: 500;
+  line-height: 1.02;
+  letter-spacing: -0.015em;
+}
+
+.restored-auth .hero-lede {
+  max-width: 610px;
+  margin: 1.45rem 0 0;
+  color: #5C566B;
+  font-size: clamp(1.03rem, 1.55vw, 1.22rem);
+  line-height: 1.65;
+}
+
+.restored-auth .hero-proof {
+  margin-top: 2rem;
+}
+
+.restored-auth .chip {
+  min-height: 2.1rem;
+  border-color: #E4DBF7;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #4A4458;
+  font-size: 0.78rem;
+}
+
+.restored-auth .auth-card {
+  gap: 1rem;
+  padding: clamp(1.35rem, 3vw, 2rem);
+  border: 1px solid #E7DEF6;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 34px 80px -46px rgba(46, 16, 101, 0.52);
+  backdrop-filter: blur(18px);
+}
+
+.restored-auth .auth-card h2 {
+  color: #1B1726;
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3vw, 2.45rem);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.restored-auth .muted,
+.restored-auth .form-note {
+  color: #6A6379;
+}
+
+.restored-auth .auth-choice-note {
+  border-color: #ECE4F8;
+  border-radius: 16px;
+  background: #FBFAFE;
+  color: #6A6379;
+}
+
+.restored-auth .auth-choice-note strong {
+  color: #1B1726;
+}
+
+.restored-auth .auth-choice-note span {
+  color: #7C3AED;
+}
+
+.restored-auth label {
+  color: #2A2240;
+  font-family: var(--font-sans);
+  font-weight: 600;
+}
+
+.restored-auth label span {
+  color: #8F86A1;
+}
+
+.restored-auth input {
+  min-height: 3.1rem;
+  border-color: #E3DAF4;
+  border-radius: 14px;
+  background: #ffffff;
+  color: #1B1726;
+}
+
+.restored-auth input:focus {
+  border-color: #7C3AED;
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.1);
+}
+
+.restored-auth .button {
+  min-height: 3.15rem;
+  border-radius: 999px;
+}
+
+.restored-auth .button.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #6366F1 0%, #7C3AED 52%, #9333EA 100%);
+  color: #ffffff;
+  box-shadow: 0 16px 34px -18px rgba(124, 58, 237, 0.8);
+}
+
+.restored-auth .button.primary:hover,
+.restored-auth .button.primary:focus-visible {
+  background: linear-gradient(135deg, #5558e8 0%, #6d28d9 52%, #8426d5 100%);
+}
+
+.restored-auth .button.secondary {
+  border-color: #E4DBF7;
+  background: #ffffff;
+  color: #2A2240;
+}
+
+.restored-auth .button.secondary:hover,
+.restored-auth .button.secondary:focus-visible {
+  border-color: #C9BCE6;
+  background: #F7F3FE;
+}
+
+@media (max-width: 940px) {
+  .restored-auth {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .restored-auth .auth-card .action-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =====================================================================
+   Signed-in studio - dark purple theme (matches the landing palette)
+   Scoped to .app-v4 so the landing page and the sign-in screen keep
+   their own looks. Re-skinning the design tokens here recolors every
+   descendant component (dashboard cards, metrics, sidebar, charts)
+   because they all read these variables.
+   ===================================================================== */
+.app-v4 {
+  --bg: #120726;
+  --bg-soft: #190d31;
+  --surface: rgba(34, 20, 60, 0.72);
+  --surface-strong: rgba(40, 24, 70, 0.92);
+  --surface-soft: rgba(255, 255, 255, 0.06);
+  --line: rgba(168, 139, 250, 0.20);
+  --line-strong: rgba(168, 139, 250, 0.36);
+  --text: #ffffff;
+  --muted: #c8bbe9;
+  --muted-2: #9a8ac4;
+  --cyan: #b9a3ff; /* repurposed as the violet accent for kickers/links */
+  --shadow: 0 28px 80px rgba(8, 2, 24, 0.55);
+
+  background:
+    radial-gradient(1100px 700px at 80% -10%, rgba(147, 51, 234, 0.22), transparent 60%),
+    radial-gradient(900px 620px at 0% 0%, rgba(99, 102, 241, 0.16), transparent 55%),
+    linear-gradient(180deg, #160a2e 0%, #120726 52%, #0d0520 100%);
+}
+
+/* Frosted purple chrome for the sidebar and topbar */
+.app-v4 .sidebar {
+  border-right: 1px solid var(--line);
+  background: rgba(18, 9, 38, 0.84);
+}
+
+.app-v4 .app-topbar {
+  border-bottom: 1px solid var(--line);
+  background: rgba(18, 9, 38, 0.72);
+}
+
+.app-v4 .sidebar-link:hover,
+.app-v4 .sidebar-link:focus-visible {
+  background: rgba(168, 139, 250, 0.12);
+}
+
+.app-v4 .sidebar-link.active {
+  border: 1px solid rgba(168, 139, 250, 0.34);
+  background: linear-gradient(90deg, rgba(124, 58, 237, 0.34), rgba(147, 51, 234, 0.16));
+  color: #ffffff;
+}
+
+.app-v4 .nav-divider {
+  background: var(--line);
+}
+
+.app-v4 .text-link {
+  color: var(--cyan);
+}
+
+/* Primary buttons use the landing gradient with white text */
+.app-v4 .button.primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 52%, #9333ea 100%);
+  color: #ffffff;
+  box-shadow: 0 14px 30px -10px rgba(124, 58, 237, 0.6);
+}
+
+.app-v4 .button.primary:hover,
+.app-v4 .button.primary:focus-visible {
+  background: linear-gradient(135deg, #7376f5 0%, #8b46f0 52%, #a042f0 100%);
+}
+
+.app-v4 .button.secondary:hover,
+.app-v4 .button.secondary:focus-visible,
+.app-v4 .button.ghost:hover,
+.app-v4 .button.ghost:focus-visible {
+  border-color: rgba(168, 139, 250, 0.55);
+  background: rgba(168, 139, 250, 0.14);
+}
+
+.app-v4 .quick-action:hover {
+  border-color: rgba(168, 139, 250, 0.5);
+  background: rgba(168, 139, 250, 0.12);
+}
+
+/* Recolor the analytics bars into the purple family */
+.app-v4 .bar {
+  background: linear-gradient(180deg, #a78bfa, rgba(124, 58, 237, 0.25));
+}
+
+.app-v4 .bar.coral {
+  background: linear-gradient(180deg, #c084fc, rgba(192, 132, 252, 0.22));
+}
+
+.app-v4 .bar.gold {
+  background: linear-gradient(180deg, #818cf8, rgba(129, 140, 248, 0.22));
+}
+
+/* Onboarding/empty states */
+.app-v4 .empty-dashboard article,
+.app-v4 .empty-panel {
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(135deg, rgba(124, 58, 237, 0.14), transparent 44%),
+    rgba(26, 15, 46, 0.82);
+}
+
+.app-v4 .step-dot,
+.app-v4 .empty-mark {
+  border: 1px solid rgba(168, 139, 250, 0.4);
+  color: var(--cyan);
+}
+
+/* Dashboard hero - a compact echo of the landing hero gradient */
+.app-v4 .dashboard-hero-v5 {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(168, 139, 250, 0.28);
+  background:
+    radial-gradient(680px 320px at 88% -45%, rgba(147, 51, 234, 0.42), transparent 62%),
+    linear-gradient(135deg, rgba(99, 102, 241, 0.32) 0%, rgba(124, 58, 237, 0.22) 48%, rgba(20, 10, 40, 0.30) 100%);
+}
+
+.app-v4 .dashboard-hero-v5 h2 {
+  color: #ffffff;
+}
+
+.app-v4 .dashboard-hero-v5 .section-kicker {
+  color: #d6c8ff;
+}
+
+/* Brand mark border picks up the violet accent too */
+.app-v4 .dna-logo {
+  border: 1px solid rgba(168, 139, 250, 0.5);
 }

@@ -46,7 +46,11 @@ let appConfig = {
   authProvider: "not-configured",
   aiProvider: "local-fallback",
 };
+const ELEVEN_DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Rachel (ElevenLabs premade)
 let saveTimer = null;
+let elevenVoices = []; // cached list of the account's ElevenLabs voices
+let elevenVoicesLoaded = false;
+let voiceoverClips = []; // session-only: generated audio data URLs (not persisted)
 
 function loadState() {
   try {
@@ -69,6 +73,7 @@ function mergeState(base, saved) {
     ideas: isLegacyDemo ? [] : (Array.isArray(saved.ideas) ? saved.ideas : cleanBase.ideas),
     scripts: isLegacyDemo ? [] : (Array.isArray(saved.scripts) ? saved.scripts : cleanBase.scripts),
     thumbnails: isLegacyDemo ? [] : (Array.isArray(saved.thumbnails) ? saved.thumbnails : cleanBase.thumbnails),
+    voiceovers: isLegacyDemo ? [] : (Array.isArray(saved.voiceovers) ? saved.voiceovers : cleanBase.voiceovers),
     trends: isLegacyDemo ? null : (saved.trends || null),
     videoChecks: isLegacyDemo ? [] : (Array.isArray(saved.videoChecks) ? saved.videoChecks : cleanBase.videoChecks),
     calendar: isLegacyDemo ? [] : (Array.isArray(saved.calendar) ? saved.calendar : cleanBase.calendar),
@@ -249,13 +254,7 @@ function moneylessApiNote() {
 function dnaLogo(label = true) {
   return `
     <span class="brand">
-      <span class="dna-logo" aria-hidden="true">
-        <svg viewBox="0 0 48 48" role="img">
-          <path d="M14 7c10 0 20 8 20 17S24 41 14 41" />
-          <path d="M34 7c-10 0-20 8-20 17s10 17 20 17" />
-          <path d="M17 14h14M14 24h20M17 34h14" />
-        </svg>
-      </span>
+      <img class="brand-logo" src="contentus.jpg" alt="Contentus" />
       ${label ? `<span class="brand-text"><span>Contentus</span><small>Creator DNA OS</small></span>` : ""}
     </span>
   `;
@@ -268,6 +267,7 @@ function icon(name) {
     spark: "M16 3l2.5 7.5L26 13l-7.5 2.5L16 23l-2.5-7.5L6 13l7.5-2.5L16 3Z",
     script: "M8 4h12l4 4v20H8V4ZM20 4v6h6M12 14h10M12 19h10M12 24h7",
     film: "M5 7h22v18H5V7ZM10 7v18M22 7v18M5 13h22M5 19h22",
+    mic: "M16 4a4 4 0 0 1 4 4v6a4 4 0 0 1-8 0V8a4 4 0 0 1 4-4ZM8 14a8 8 0 0 0 16 0M16 22v6M11 28h10",
     guard: "M16 3l11 5v8c0 7-4.5 12-11 14C9.5 28 5 23 5 16V8l11-5Z",
     chart: "M5 26h22M8 22V12M16 22V6M24 22v-8",
     calendar: "M7 7h20v21H7V7ZM11 4v6M23 4v6M7 13h20",
@@ -392,6 +392,7 @@ function render() {
   app.className = "app-root";
   app.innerHTML = appShellV4(activeRoute);
   requestAnimationFrame(positionTutorialSpotlight);
+  if (activeRoute === "/app/voiceover") initVoiceoverPage();
 }
 
 function authView() {
@@ -604,7 +605,8 @@ function dashboardPage() {
 }
 
 function metric(label, value, trend, tone = "good") {
-  return `<article class="metric-card"><div class="metric-head"><span class="micro-copy">${label}</span><span class="badge ${tone}">${tone}</span></div><div class="metric-value">${value}</div><span class="trend ${tone === "bad" ? "bad" : tone === "warn" ? "warn" : ""}">${trend}</span></article>`;
+  const isText = !/\d/.test(String(value));
+  return `<article class="metric-card"><div class="metric-head"><span class="micro-copy">${label}</span><span class="badge ${tone}">${tone}</span></div><div class="metric-value${isText ? " metric-value-text" : ""}">${value}</div><span class="trend ${tone === "bad" ? "bad" : tone === "warn" ? "warn" : ""}">${trend}</span></article>`;
 }
 
 function quickAction(path, title, text) {
@@ -1876,26 +1878,28 @@ function authViewV4() {
   return `
     <section class="auth-layout restored-auth">
       <div class="auth-copy">
-        <a href="/">${dnaLogo()}</a>
-        <p class="eyebrow">Real account storage</p>
-        <h1>Sign in and keep your creator brain intact.</h1>
+        <a class="auth-brand-link" href="/">
+          <img src="contentus.jpg" alt="" class="auth-brand-logo">
+          <span><strong>Contentus</strong><small>Creator DNA OS</small></span>
+        </a>
+        <p class="eyebrow">Open your studio</p>
+        <h1>Keep building without losing your voice.</h1>
         <p class="hero-lede">
-          Contentus uses Supabase Auth when your keys are present. Your Creator DNA,
-          ideas, scripts, thumbnails, calendar, and channel data are saved to your user profile
-          so they come back with you.
+          Sign in to bring your Creator DNA, ideas, scripts, thumbnails, calendar, and channel data
+          back into the same personal workspace.
         </p>
         <div class="hero-proof">
-          <span class="chip">${appConfig.integrations.supabase ? "Supabase connected" : "Supabase not configured"}</span>
-          <span class="chip">${appConfig.integrations.featherless ? "Featherless connected" : "Local AI fallback"}</span>
-          <span class="chip">${appConfig.integrations.youtubeData ? "YouTube Data connected" : "YouTube key needed"}</span>
+          <span class="chip">Creator DNA</span>
+          <span class="chip">Saved workspace</span>
+          <span class="chip">${appConfig.integrations.supabase ? "Supabase connected" : "Local storage mode"}</span>
         </div>
       </div>
       <form class="auth-card" id="login-form">
-        <h2>Welcome to Contentus</h2>
+        <h2>Welcome back</h2>
         <p class="muted">${authStatusNoteV4()}</p>
         <div class="auth-choice-note">
-          <p><strong>New here?</strong> Fill the form and choose <span>Create account</span>.</p>
-          <p><strong>Already saved data?</strong> Use <span>Sign in</span> to restore it.</p>
+          <p><strong>New creator?</strong> Fill the form and choose <span>Create account</span>.</p>
+          <p><strong>Returning?</strong> Use <span>Sign in</span> to restore your studio.</p>
         </div>
         <div class="form-field">
           <label for="login-name">Creator name <span>optional</span></label>
@@ -1938,6 +1942,7 @@ function appShellV4(route) {
           ${navLink("/app/scripts", "script", "Script Builder")}
           ${navLink("/app/ad-studio", "film", "Ad Studio")}
           ${navLink("/app/thumbnail", "film", "Thumbnail")}
+          ${navLink("/app/voiceover", "mic", "Voiceover")}
           ${navLink("/app/trends", "chart", "Trend Analyser")}
           ${navLink("/app/video-checker", "guard", "Video Checker")}
           ${navLink("/app/authenticity", "guard", "Authenticity")}
@@ -1984,6 +1989,7 @@ function pageForRouteV4(route) {
     "/app/scripts": { title: "Script Builder", subtitle: "Write length-aware scripts and export formatted PDFs.", html: scriptsPageV4() },
     "/app/ad-studio": { title: "Ad Studio", subtitle: "Create ads, short films, promos, and campaign concepts.", html: adStudioPageV4() },
     "/app/thumbnail": { title: "Thumbnail Designer", subtitle: "Design thumbnails locally or generate a real AI image.", html: thumbnailPageV4() },
+    "/app/voiceover": { title: "Voiceover Studio", subtitle: "Turn a script into a real AI narration with ElevenLabs.", html: voiceoverPageV4() },
     "/app/trends": { title: "Trend Analyser", subtitle: "Read what's trending and turn it into angles that fit your voice.", html: trendsPageV4() },
     "/app/video-checker": { title: "Video Checker", subtitle: "Get honest pre-publish feedback on a YouTube link or uploaded clip.", html: videoCheckerPageV4() },
     "/app/authenticity": { title: "Authenticity Guard", subtitle: "Check whether content sounds like you before publishing.", html: authenticityPageV4() },
@@ -2159,8 +2165,8 @@ function dnaPageV4() {
         </div>
       </div>
 
-      <div class="workspace-layout">
-        <form class="tool-card compact-form" id="dna-form">
+      <div class="dna-layout">
+        <form class="tool-card compact-form dna-form-wide" id="dna-form">
           <div class="form-grid">
             ${fieldV4("creator-name", "Creator name", state.creator.creatorName, "text", "Your name, channel, or brand")}
             ${fieldV4("niche", "Niche", state.creator.niche, "text", "Student creator, beauty, comedy, film, etc.")}
@@ -2192,7 +2198,7 @@ function dnaPageV4() {
           </div>
         </form>
 
-        <aside class="dashboard-card sticky-output" id="dna-output">
+        <aside class="dashboard-card" id="dna-output">
           ${dna.score ? dnaOutputV4(dna) : emptyPanel("No Creator DNA yet", "Add samples and generate your profile. The dashboard stays blank until you do.", "Builds from real creator input only.")}
         </aside>
       </div>
@@ -2481,6 +2487,141 @@ function adOutputV4(project) {
       </div>
     </article>
   `;
+}
+
+function voiceoverPageV4() {
+  const latest = voiceoverClips[0];
+  const scriptText = latestScriptVoiceoverText();
+  return `
+    <section class="page page-v4">
+      <div class="builder-layout">
+        <form class="tool-card compact-form" id="voiceover-form">
+          <div class="card-topline"><div><span class="section-kicker">Voiceover Studio</span><h3>ElevenLabs narration</h3></div></div>
+          ${textareaV4("voice-text", "Script to narrate", scriptText, "Paste or write the exact words to speak aloud.", "full")}
+          ${scriptText ? `<button class="button secondary full-width" type="button" data-action="v4-use-script-voiceover">Reload latest script voiceover</button>` : ""}
+          <div class="form-field">
+            <label for="voice-select">Voice</label>
+            <div class="select-wrap">
+              <select id="voice-select" data-custom-select="voice-select">
+                <option value="${escapeHtml(ELEVEN_DEFAULT_VOICE_ID)}" selected>Default voice (Rachel)</option>
+                <option value="Custom">Custom voice ID...</option>
+              </select>
+            </div>
+            <input id="voice-select-custom" class="custom-input" placeholder="Paste an ElevenLabs voice ID" hidden>
+            <small class="form-hint" id="voice-load-note">Loading your ElevenLabs voices...</small>
+          </div>
+          ${selectCustom("voice-model", "Model", [
+            { value: "eleven_multilingual_v2", label: "Multilingual v2 (best quality)" },
+            { value: "eleven_turbo_v2_5", label: "Turbo v2.5 (fast, cheaper)" },
+            { value: "eleven_flash_v2_5", label: "Flash v2.5 (lowest latency)" },
+            { value: "Custom", label: "Custom" },
+          ])}
+          ${selectCustom("voice-format", "Audio quality", [
+            { value: "mp3_44100_128", label: "MP3 44.1kHz 128kbps" },
+            { value: "mp3_44100_64", label: "MP3 44.1kHz 64kbps" },
+            { value: "mp3_22050_32", label: "MP3 22kHz 32kbps (smallest)" },
+          ])}
+          ${rangeV4("voice-stability", "Stability", 0, 1, 0.05, 0.5)}
+          ${rangeV4("voice-style", "Style exaggeration", 0, 1, 0.05, 0)}
+          ${rangeV4("voice-speed", "Speed", 0.7, 1.2, 0.05, 1)}
+          <button class="button primary full-width" type="button" data-action="v4-generate-voiceover">Generate voiceover</button>
+          <small class="form-hint">Audio is generated with your ElevenLabs account. Long scripts are trimmed to keep each clip short ??split them into parts for full narration.</small>
+        </form>
+        <section class="output-column">
+          <div id="voiceover-output">${latest ? voiceOutputV4(latest) : emptyPanel("No voiceover yet", "Paste a script, pick a voice, and generate a real AI narration.", "Pulls from your latest script automatically when one exists.")}</div>
+          ${state.voiceovers.length ? voiceoverHistoryV4() : ""}
+        </section>
+      </div>
+    </section>
+  `;
+}
+
+function voiceOutputV4(clip) {
+  return `
+    <article class="dashboard-card voiceover-card">
+      <div class="card-topline">
+        <div><span class="section-kicker">Generated voiceover</span><h3>${escapeHtml(clip.voiceName || "Narration")}</h3></div>
+        <span class="badge good">${escapeHtml(clip.modelLabel || clip.modelId || "ElevenLabs")}</span>
+      </div>
+      <audio class="voiceover-player" controls src="${clip.audioUrl}"></audio>
+      <div class="action-row compact-actions">
+        <a class="button primary" href="${clip.audioUrl}" download="${escapeHtml(clip.fileName || "contentus-voiceover.mp3")}">Download MP3</a>
+      </div>
+      <p class="muted voiceover-meta">${escapeHtml(`${clip.characters || 0} characters - ${clip.voiceName || "voice"} - ${formatDate(clip.createdAt)}`)}</p>
+      ${sectionBlock("Narrated text", clip.text)}
+    </article>
+  `;
+}
+
+function voiceoverHistoryV4() {
+  return `
+    <article class="dashboard-card">
+      <div class="card-topline"><div><span class="section-kicker">History</span><h3>Recent voiceovers</h3></div></div>
+      <div class="list-stack">
+        ${state.voiceovers.slice(0, 6).map((item) => insight(item.voiceName || "Voiceover", `${item.characters || 0} chars - ${formatDate(item.createdAt)}`)).join("")}
+      </div>
+      <small class="form-hint">Audio files aren't stored after you leave. Download clips you want to keep.</small>
+    </article>
+  `;
+}
+
+function rangeV4(id, label, min, max, step, value) {
+  return `
+    <div class="form-field range-field">
+      <label for="${id}">${label} <span class="range-value" data-range-value="${id}">${value}</span></label>
+      <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}">
+    </div>
+  `;
+}
+
+function latestScriptVoiceoverText() {
+  const script = state.scripts?.[0];
+  if (!script) return "";
+  return String(script.voiceover || script.script || "").trim();
+}
+
+function useScriptVoiceoverText() {
+  const text = latestScriptVoiceoverText();
+  const field = document.querySelector("#voice-text");
+  if (!field) return;
+  if (!text) {
+    toast("No saved script to pull from yet.");
+    return;
+  }
+  field.value = text;
+  toast("Loaded latest script voiceover.");
+}
+
+async function initVoiceoverPage() {
+  const note = document.querySelector("#voice-load-note");
+  if (elevenVoicesLoaded) {
+    fillVoiceSelect();
+    return;
+  }
+  try {
+    const result = await apiJson("/api/ai/voices");
+    elevenVoicesLoaded = true;
+    if (result.ok && result.data.configured) {
+      elevenVoices = normalizeList(result.data.voices);
+      fillVoiceSelect(result.data.defaultVoiceId);
+      if (note) note.textContent = elevenVoices.length ? `${elevenVoices.length} voices loaded from your ElevenLabs account.` : "No custom voices found. Using ElevenLabs default voices.";
+    } else if (note) {
+      note.textContent = result.data.message || "ElevenLabs not configured. Add ELEVENLABS_API_KEY to load your voices.";
+    }
+  } catch {
+    if (note) note.textContent = "Could not load ElevenLabs voices right now.";
+  }
+}
+
+function fillVoiceSelect(defaultVoiceId = "") {
+  const select = document.querySelector("#voice-select");
+  if (!select || !elevenVoices.length) return;
+  const options = elevenVoices.map((voice) =>
+    `<option value="${escapeHtml(voice.voiceId)}">${escapeHtml(voice.name)}${voice.category ? ` (${escapeHtml(voice.category)})` : ""}</option>`
+  ).join("");
+  select.innerHTML = `${options}<option value="Custom">Custom voice ID...</option>`;
+  const preferred = elevenVoices.find((voice) => voice.voiceId === defaultVoiceId) || elevenVoices[0];
+  if (preferred) select.value = preferred.voiceId;
 }
 
 function thumbnailPageV4() {
@@ -2981,6 +3122,13 @@ document.addEventListener("change", (event) => {
   }
 });
 
+document.addEventListener("input", (event) => {
+  const range = event.target.closest('input[type="range"]');
+  if (!range) return;
+  const valueLabel = document.querySelector(`[data-range-value="${range.id}"]`);
+  if (valueLabel) valueLabel.textContent = range.value;
+});
+
 document.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
   if (!button) return;
@@ -3000,6 +3148,8 @@ document.addEventListener("click", async (event) => {
   if (action === "v4-save-script-calendar") return saveScriptToCalendar();
   if (action === "v4-download-script") return downloadLatestScriptPdf();
   if (action === "v4-generate-ad") return handleGenerateAdV4(button);
+  if (action === "v4-generate-voiceover") return handleGenerateVoiceoverV4(button);
+  if (action === "v4-use-script-voiceover") return useScriptVoiceoverText();
   if (action === "v4-generate-thumbnail") return generateThumbnailCanvas();
   if (action === "v4-generate-thumbnail-ai") return handleThumbnailImageV4(button);
   if (action === "v4-thumbnail-copy") return handleThumbnailCopy(button);
@@ -3294,6 +3444,53 @@ async function handleGenerateAdV4(button) {
     saveState();
     document.querySelector("#ad-output").innerHTML = adOutputV4(state.adProjects[0]);
     toast("Project generated.");
+  });
+}
+
+async function handleGenerateVoiceoverV4(button) {
+  await withBusy(button, "Generating...", async () => {
+    const text = document.querySelector("#voice-text")?.value.trim();
+    if (!text) {
+      toast("Add a script or some text to narrate first.");
+      return;
+    }
+    const voiceId = customValue("voice-select");
+    const modelId = customValue("voice-model");
+    const payload = {
+      text,
+      voiceId,
+      modelId,
+      outputFormat: customValue("voice-format"),
+      stability: Number(document.querySelector("#voice-stability")?.value ?? 0.5),
+      style: Number(document.querySelector("#voice-style")?.value ?? 0),
+      speed: Number(document.querySelector("#voice-speed")?.value ?? 1),
+    };
+    const result = await apiJson("/api/ai/voiceover", { method: "POST", body: payload });
+    if (!result.ok || !result.data.audio?.data) {
+      toast(result.data.message || result.data.error || "Voiceover generation failed.");
+      return;
+    }
+    const voice = elevenVoices.find((item) => item.voiceId === voiceId);
+    const modelLabel = document.querySelector("#voice-model")?.selectedOptions?.[0]?.textContent?.trim() || modelId;
+    const clip = {
+      id: `vo-${Date.now()}`,
+      text,
+      voiceId,
+      voiceName: voice?.name || (voiceId === ELEVEN_DEFAULT_VOICE_ID ? "Rachel (default)" : "Custom voice"),
+      modelId,
+      modelLabel,
+      characters: result.data.characters || text.length,
+      audioUrl: `data:${result.data.audio.mimeType || "audio/mpeg"};base64,${result.data.audio.data}`,
+      fileName: `${slugify((voice?.name || "voiceover") + "-" + text.slice(0, 24))}.mp3`,
+      createdAt: new Date().toISOString(),
+    };
+    voiceoverClips = [clip, ...voiceoverClips].slice(0, 20);
+    // Persist only lightweight metadata; the audio itself stays in memory for this session.
+    state.voiceovers = [{ id: clip.id, voiceName: clip.voiceName, modelId, characters: clip.characters, createdAt: clip.createdAt }, ...(state.voiceovers || [])].slice(0, 20);
+    saveState();
+    const node = document.querySelector("#voiceover-output");
+    if (node) node.innerHTML = voiceOutputV4(clip);
+    toast(result.data.note || "Voiceover generated.");
   });
 }
 

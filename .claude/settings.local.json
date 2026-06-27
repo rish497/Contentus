@@ -4,7 +4,11 @@
       "Bash(npm run *)",
       "Bash(node *)",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3000/)",
-      "Bash(curl -s -X POST http://localhost:3000/api/ai/script -H \"Content-Type: application/json\" -d '{\"idea\":{\"title\":\"Are brain rot Roblox games actually bad for kids\"},\"platform\":\"YouTube\",\"length\":\"60 seconds\",\"format\":\"talking head\",\"tone\":\"funny\",\"audience\":\"parents and gamers\"}')"
+      "Bash(curl -s -X POST http://localhost:3000/api/ai/script -H \"Content-Type: application/json\" -d '{\"idea\":{\"title\":\"Are brain rot Roblox games actually bad for kids\"},\"platform\":\"YouTube\",\"length\":\"60 seconds\",\"format\":\"talking head\",\"tone\":\"funny\",\"audience\":\"parents and gamers\"}')",
+      "Bash(grep -n \"^.form-field\\\\|^.eyebrow\\\\|^.chip\\\\|^.button {\\\\|^h1,\\\\|^h1 {\\\\|^h2 {\\\\|^.hero-proof\" styles.css)",
+      "WebSearch",
+      "WebFetch(domain:developers.cloudflare.com)",
+      "WebFetch(domain:featherless.ai)"
     ]
   }
 }
