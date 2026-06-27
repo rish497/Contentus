@@ -54,6 +54,12 @@ let elevenVoicesLoaded = false;
 let elevenDefaultVoiceId = ELEVEN_DEFAULT_VOICE_ID;
 let voiceoverClips = []; // session-only: generated audio data URLs (not persisted)
 let adVoiceoverClips = []; // session-only: generated Ad Studio narration data URLs
+const toolTabs = {
+  ideas: "current",
+  scripts: "current",
+  ads: "current",
+  thumbnails: "current",
+};
 
 function loadState() {
   try {
@@ -87,6 +93,10 @@ function mergeState(base, saved) {
     growthInsights: isLegacyDemo ? [] : (Array.isArray(saved.growthInsights) ? saved.growthInsights : cleanBase.growthInsights),
     google: isLegacyDemo ? null : (saved.google || null),
     googleCalendarEvents: isLegacyDemo ? [] : (Array.isArray(saved.googleCalendarEvents) ? saved.googleCalendarEvents : cleanBase.googleCalendarEvents),
+    selectedIdeaId: isLegacyDemo ? "" : (saved.selectedIdeaId || ""),
+    selectedScriptId: isLegacyDemo ? "" : (saved.selectedScriptId || ""),
+    selectedAdProjectId: isLegacyDemo ? "" : (saved.selectedAdProjectId || ""),
+    selectedThumbnailId: isLegacyDemo ? "" : (saved.selectedThumbnailId || ""),
     selectedVideoId: isLegacyDemo ? "" : (saved.selectedVideoId || ""),
     tutorialCompleted: isLegacyDemo ? false : Boolean(saved.tutorialCompleted),
     tutorialStep: isLegacyDemo ? 0 : Number(saved.tutorialStep || 0),
@@ -389,6 +399,7 @@ function render() {
   requestAnimationFrame(positionTutorialSpotlight);
   if (activeRoute === "/app/voiceover") initVoiceoverPage();
   if (activeRoute === "/app/ad-studio") initAdStudioPage();
+  if (activeRoute === "/app/thumbnail") requestAnimationFrame(drawSelectedThumbnailPreview);
 }
 
 function navLink(path, iconName, label) {
@@ -1082,6 +1093,8 @@ function dnaOutputV4(dna) {
 }
 
 function ideasPageV4() {
+  const current = currentIdea();
+  const showingHistory = toolTabs.ideas === "history";
   return `
     <section class="page page-v4">
       <div class="builder-layout">
@@ -1103,14 +1116,37 @@ function ideasPageV4() {
 
         <section class="output-column">
           <div class="card-topline">
-            <div><span class="section-kicker">Output</span><h3>${state.ideas.length ? "Saved ideas" : "No ideas yet"}</h3></div>
+            <div><span class="section-kicker">Output</span><h3>${current ? escapeHtml(current.title || "Saved idea") : "No ideas yet"}</h3></div>
           </div>
+          ${generationTabs("ideas", [
+            { id: "current", label: "Current", count: current ? 1 : 0 },
+            { id: "history", label: "History", count: state.ideas.length },
+          ])}
           <div id="ideas-output" class="idea-list">
-            ${state.ideas.length ? state.ideas.map(ideaCardV4).join("") : emptyPanel("Your ideas will appear here", "Generate ideas from your topic and Creator DNA. Nothing is pre-filled.", "Every result includes authenticity score, generic risk, and a personalization tip.")}
+            ${showingHistory ? ideaHistoryV4(current) : (current ? ideaCardV4(current) : emptyPanel("Your ideas will appear here", "Generate ideas from your topic and Creator DNA. Nothing is pre-filled.", "Every result includes authenticity score, generic risk, and a personalization tip."))}
           </div>
         </section>
       </div>
     </section>
+  `;
+}
+
+function ideaHistoryV4(current) {
+  if (!state.ideas.length) return emptyPanel("No idea history yet", "Generate ideas and they will appear here.", "The latest idea is selected automatically.");
+  return `
+    <article class="dashboard-card generation-history-card">
+      <div class="card-topline">
+        <div><span class="section-kicker">Past generations</span><h3>${state.ideas.length} ideas</h3></div>
+      </div>
+      <div class="generation-history-list">
+        ${state.ideas.map((idea) => `
+          <button class="generation-history-item ${current && idea.id === current.id ? "active" : ""}" type="button" data-action="v4-select-idea" data-idea-id="${escapeHtml(idea.id)}">
+            <span class="generation-history-title">${escapeHtml(idea.title || "Untitled idea")}</span>
+            <span class="generation-history-meta">${escapeHtml(idea.platform || idea.contentType || "Idea")} · ${escapeHtml(generationDateLabel(idea))}${idea.authenticityScore ? ` · ${escapeHtml(String(idea.authenticityScore))}% you` : ""}</span>
+          </button>
+        `).join("")}
+      </div>
+    </article>
   `;
 }
 
@@ -1175,16 +1211,48 @@ function hitMissBlock(idea) {
   `;
 }
 
+function generationTabs(tool, tabs) {
+  return `
+    <div class="mini-tabs" role="tablist" aria-label="${escapeHtml(tool)} generations">
+      ${tabs.map((tab) => {
+        const active = toolTabs[tool] === tab.id;
+        return `
+          <button class="mini-tab ${active ? "active" : ""}" type="button" role="tab" aria-selected="${active ? "true" : "false"}" data-action="v4-tool-tab" data-tool="${escapeHtml(tool)}" data-tab="${escapeHtml(tab.id)}">
+            <span>${escapeHtml(tab.label)}</span>
+            ${tab.count != null ? `<small>${escapeHtml(String(tab.count))}</small>` : ""}
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function generationDateLabel(item) {
+  const raw = item?.updatedAt || item?.createdAt;
+  if (!raw) return "Saved";
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return "Saved";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function currentIdea() {
+  return state.ideas.find((idea) => idea.id === state.selectedIdeaId) || state.ideas[0] || null;
+}
+
 function currentScript() {
   return state.scripts.find((s) => s.id === state.selectedScriptId) || state.scripts[0] || null;
 }
 
 function scriptDateLabel(script) {
-  const raw = script.updatedAt || script.createdAt;
-  if (!raw) return "Saved";
-  const date = new Date(raw);
-  if (Number.isNaN(date.getTime())) return "Saved";
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return generationDateLabel(script);
+}
+
+function currentAdProject() {
+  return (state.adProjects || []).find((project) => project.id === state.selectedAdProjectId) || state.adProjects?.[0] || null;
+}
+
+function currentThumbnail() {
+  return (state.thumbnails || []).find((item) => item.id === state.selectedThumbnailId) || state.thumbnails?.[0] || null;
 }
 
 function scriptHistoryV4(current) {
@@ -1208,6 +1276,7 @@ function scriptHistoryV4(current) {
 
 function scriptsPageV4() {
   const latest = currentScript();
+  const showingHistory = toolTabs.scripts === "history";
   return `
     <section class="page page-v4">
       <div class="builder-layout script-builder-layout">
@@ -1226,15 +1295,18 @@ function scriptsPageV4() {
         </form>
 
         <section class="script-workspace">
-          ${scriptHistoryV4(latest)}
           <div class="card-topline">
-            <div><span class="section-kicker">Script output</span><h3>${latest?.title ? escapeHtml(latest.title) : "No script yet"}</h3></div>
-            ${latest ? `<button class="button secondary" type="button" data-action="v4-download-script">Download PDF</button>` : ""}
+            <div><span class="section-kicker">Script output</span><h3>${showingHistory ? "Saved scripts" : (latest?.title ? escapeHtml(latest.title) : "No script yet")}</h3></div>
+            ${latest && !showingHistory ? `<button class="button secondary" type="button" data-action="v4-download-script">Download PDF</button>` : ""}
           </div>
+          ${generationTabs("scripts", [
+            { id: "current", label: "Current", count: latest ? 1 : 0 },
+            { id: "history", label: "History", count: state.scripts.length },
+          ])}
           <div id="script-output">
-            ${latest ? scriptOutputV4(latest) : emptyPanel("Generate your first script", "Choose an idea or custom concept. The script length changes based on your selected duration.", "PDF export creates a formatted script document.")}
+            ${showingHistory ? scriptHistoryV4(latest) : (latest ? scriptOutputV4(latest) : emptyPanel("Generate your first script", "Choose an idea or custom concept. The script length changes based on your selected duration.", "PDF export creates a formatted script document."))}
           </div>
-          ${latest ? scriptButtonsV4() : ""}
+          ${latest && !showingHistory ? scriptButtonsV4() : ""}
         </section>
       </div>
     </section>
@@ -1316,7 +1388,8 @@ function scriptOutputV4(script) {
 }
 
 function adStudioPageV4() {
-  const latest = state.adProjects?.[0];
+  const latest = currentAdProject();
+  const showingHistory = toolTabs.ads === "history";
   return `
     <section class="page page-v4">
       <div class="builder-layout">
@@ -1355,10 +1428,37 @@ function adStudioPageV4() {
           <button class="button primary full-width" type="button" data-action="v4-generate-ad">Generate project</button>
         </form>
         <section class="output-column">
-          <div id="ad-output">${latest ? adOutputV4(latest) : emptyPanel("No ad or film project yet", "Generate a real concept from your product, story, audience, and Creator DNA.", "Outputs include emotional, funny, and cinematic versions.")}</div>
+          <div class="card-topline">
+            <div><span class="section-kicker">Ad Studio output</span><h3>${showingHistory ? "Past projects" : (latest?.title ? escapeHtml(latest.title) : "No project yet")}</h3></div>
+          </div>
+          ${generationTabs("ads", [
+            { id: "current", label: "Current", count: latest ? 1 : 0 },
+            { id: "history", label: "History", count: state.adProjects?.length || 0 },
+          ])}
+          <div id="ad-output">${showingHistory ? adHistoryV4(latest) : (latest ? adOutputV4(latest) : emptyPanel("No ad or film project yet", "Generate a real concept from your product, story, audience, and Creator DNA.", "Outputs include emotional, funny, and cinematic versions."))}</div>
         </section>
       </div>
     </section>
+  `;
+}
+
+function adHistoryV4(current) {
+  const projects = normalizeList(state.adProjects);
+  if (!projects.length) return emptyPanel("No ad history yet", "Generate an ad, short film, or promo and it will appear here.", "Older projects stay selectable from this tab.");
+  return `
+    <article class="dashboard-card generation-history-card">
+      <div class="card-topline">
+        <div><span class="section-kicker">Past generations</span><h3>${projects.length} projects</h3></div>
+      </div>
+      <div class="generation-history-list">
+        ${projects.map((project) => `
+          <button class="generation-history-item ${current && project.id === current.id ? "active" : ""}" type="button" data-action="v4-select-ad" data-ad-id="${escapeHtml(project.id)}">
+            <span class="generation-history-title">${escapeHtml(project.title || project.concept || "Untitled project")}</span>
+            <span class="generation-history-meta">${escapeHtml(project.recommendedVersion || project.projectType || "Ad Studio")} · ${escapeHtml(generationDateLabel(project))}${project.voiceoverAudio ? " · narration" : ""}</span>
+          </button>
+        `).join("")}
+      </div>
+    </article>
   `;
 }
 
@@ -1606,6 +1706,8 @@ function voiceoverClipFromApi(data, options = {}) {
 }
 
 function thumbnailPageV4() {
+  const latest = currentThumbnail();
+  const showingHistory = toolTabs.thumbnails === "history";
   return `
     <section class="page page-v4">
       <div class="builder-layout thumbnail-layout">
@@ -1628,15 +1730,50 @@ function thumbnailPageV4() {
           <small class="form-hint">AI image uses free Pollinations generation — it can take 10-40s. Use "Local canvas draft" for an instant text-only layout.</small>
         </form>
         <section class="thumbnail-stage">
-          <div id="thumb-progress" class="thumb-progress hidden" role="progressbar" aria-label="Generating AI image" aria-valuemin="0" aria-valuemax="100">
-            <div class="thumb-progress-track"><div id="thumb-progress-fill" class="thumb-progress-fill"></div></div>
-            <span class="thumb-progress-label">Generating AI image… this can take 10-40s</span>
+          <div class="card-topline">
+            <div><span class="section-kicker">Thumbnail output</span><h3>${showingHistory ? "Past thumbnails" : (latest?.title ? escapeHtml(latest.title) : "Canvas preview")}</h3></div>
           </div>
-          <canvas id="thumbnail-canvas" width="1280" height="720" aria-label="Generated thumbnail preview"></canvas>
-          <div id="thumbnail-copy-output" class="dashboard-card mini-output">${emptyMini("Optional AI copy suggestions will appear here.")}</div>
+          ${generationTabs("thumbnails", [
+            { id: "current", label: "Current", count: latest ? 1 : 0 },
+            { id: "history", label: "History", count: state.thumbnails?.length || 0 },
+          ])}
+          <div class="thumbnail-tab-panel ${showingHistory ? "" : "active"}">
+            <div id="thumb-progress" class="thumb-progress hidden" role="progressbar" aria-label="Generating AI image" aria-valuemin="0" aria-valuemax="100">
+              <div class="thumb-progress-track"><div id="thumb-progress-fill" class="thumb-progress-fill"></div></div>
+              <span class="thumb-progress-label">Generating AI image… this can take 10-40s</span>
+            </div>
+            <canvas id="thumbnail-canvas" width="1280" height="720" aria-label="Generated thumbnail preview"></canvas>
+            <div id="thumbnail-copy-output" class="dashboard-card mini-output">${emptyMini("Optional AI copy suggestions will appear here.")}</div>
+          </div>
+          <div class="thumbnail-tab-panel ${showingHistory ? "active" : ""}">
+            ${thumbnailHistoryV4(latest)}
+          </div>
         </section>
       </div>
     </section>
+  `;
+}
+
+function thumbnailHistoryV4(current) {
+  const thumbnails = normalizeList(state.thumbnails);
+  if (!thumbnails.length) return emptyPanel("No thumbnail history yet", "Generate an AI image or local canvas draft and it will appear here.", "New thumbnails include a small preview image.");
+  return `
+    <article class="dashboard-card generation-history-card">
+      <div class="card-topline">
+        <div><span class="section-kicker">Past generations</span><h3>${thumbnails.length} thumbnails</h3></div>
+      </div>
+      <div class="thumbnail-history-grid">
+        ${thumbnails.map((thumb) => `
+          <button class="thumbnail-history-item ${current && thumb.id === current.id ? "active" : ""}" type="button" data-action="v4-select-thumbnail" data-thumbnail-id="${escapeHtml(thumb.id)}">
+            ${thumb.previewDataUrl ? `<img src="${thumb.previewDataUrl}" alt="">` : `<span class="thumb-preview-placeholder">No preview</span>`}
+            <span>
+              <strong>${escapeHtml(thumb.title || "Untitled thumbnail")}</strong>
+              <small>${escapeHtml(thumb.source || thumb.style || thumb.palette || "Thumbnail")} · ${escapeHtml(generationDateLabel(thumb))}</small>
+            </span>
+          </button>
+        `).join("")}
+      </div>
+    </article>
   `;
 }
 
@@ -2124,7 +2261,19 @@ document.addEventListener("click", async (event) => {
   if (action === "v4-save-dna") return handleSaveDnaV4();
   if (action === "v4-start-recording") return startVoiceRecording(button);
   if (action === "v4-stop-recording") return stopVoiceRecording();
+  if (action === "v4-tool-tab") {
+    if (button.dataset.tool && button.dataset.tab) toolTabs[button.dataset.tool] = button.dataset.tab;
+    render();
+    return;
+  }
   if (action === "v4-generate-ideas") return handleGenerateIdeasV4(button);
+  if (action === "v4-select-idea") {
+    state.selectedIdeaId = button.dataset.ideaId || "";
+    toolTabs.ideas = "current";
+    saveState();
+    render();
+    return;
+  }
   if (action === "v4-use-idea") return handleUseIdeaV4(button.dataset.ideaId);
   if (action === "v4-save-idea-calendar") return saveIdeaToCalendar(button.dataset.ideaId);
   if (action === "v4-generate-script") return handleGenerateScriptV4(button);
@@ -2134,11 +2283,19 @@ document.addEventListener("click", async (event) => {
   if (action === "v4-download-script") return downloadLatestScriptPdf();
   if (action === "v4-select-script") {
     state.selectedScriptId = button.dataset.scriptId;
+    toolTabs.scripts = "current";
     saveState();
     render();
     return;
   }
   if (action === "v4-generate-ad") return handleGenerateAdV4(button);
+  if (action === "v4-select-ad") {
+    state.selectedAdProjectId = button.dataset.adId || "";
+    toolTabs.ads = "current";
+    saveState();
+    render();
+    return;
+  }
   if (action === "v4-generate-ad-voiceover") return handleGenerateAdVoiceoverV4(button);
   if (action === "v4-generate-voiceover") return handleGenerateVoiceoverV4(button);
   if (action === "v4-use-script-voiceover") return useScriptVoiceoverText();
@@ -2146,6 +2303,13 @@ document.addEventListener("click", async (event) => {
   if (action === "v4-generate-thumbnail-ai") return handleThumbnailImageV4(button);
   if (action === "v4-thumbnail-copy") return handleThumbnailCopy(button);
   if (action === "v4-download-thumbnail") return downloadThumbnailPng();
+  if (action === "v4-select-thumbnail") {
+    state.selectedThumbnailId = button.dataset.thumbnailId || "";
+    toolTabs.thumbnails = "current";
+    saveState();
+    render();
+    return;
+  }
   if (action === "v4-analyze-trends") return handleAnalyzeTrendsV4(button);
   if (action === "v4-check-video") return handleCheckVideoV4(button);
   if (action === "v4-copy-text") return copyText(button.dataset.copy || "");
@@ -2292,8 +2456,10 @@ async function handleGenerateIdeasV4(button) {
       contentType: idea.contentType || payload.contentType,
     }));
     state.ideas = [...ideas, ...state.ideas].slice(0, 50);
+    state.selectedIdeaId = ideas[0]?.id || state.selectedIdeaId;
+    toolTabs.ideas = "current";
     saveState();
-    document.querySelector("#ideas-output").innerHTML = state.ideas.map(ideaCardV4).join("");
+    render();
     toast("Ideas generated.");
   });
 }
@@ -2335,6 +2501,7 @@ async function handleGenerateScriptV4(button) {
     };
     state.scripts.unshift(script);
     state.selectedScriptId = script.id;
+    toolTabs.scripts = "current";
     saveState();
     render();
     toast("Script generated.");
@@ -2436,6 +2603,8 @@ async function handleGenerateAdV4(button) {
     }
     const project = { id: `ad-${Date.now()}`, ...result.data, createdAt: new Date().toISOString() };
     state.adProjects = [project, ...(state.adProjects || [])].slice(0, 20);
+    state.selectedAdProjectId = project.id;
+    toolTabs.ads = "current";
     let toastMessage = "Project generated.";
     if (document.querySelector("#ad-generate-voice")?.checked) {
       if (button) button.textContent = "Adding voice...";
@@ -2443,7 +2612,7 @@ async function handleGenerateAdV4(button) {
       toastMessage = voiceResult.ok ? (voiceResult.note || "Project generated with narration.") : `Project generated. ${voiceResult.message}`;
     }
     saveState();
-    document.querySelector("#ad-output").innerHTML = adOutputV4(project);
+    render();
     toast(toastMessage);
   });
 }
@@ -2460,9 +2629,10 @@ async function handleGenerateAdVoiceoverV4(button) {
       toast(result.message || "Narration generation failed.");
       return;
     }
+    state.selectedAdProjectId = project.id;
+    toolTabs.ads = "current";
     saveState();
-    const node = document.querySelector("#ad-output");
-    if (node) node.innerHTML = adOutputV4(project);
+    render();
     toast(result.note || "Narration generated.");
   });
 }
@@ -2714,7 +2884,7 @@ async function handleGoogleConnectV4(button) {
 function commentToIdea(commentId) {
   const comment = state.comments.find((item) => item.id === commentId);
   if (!comment) return;
-  state.ideas.unshift({
+  const idea = {
     id: `idea-${Date.now()}`,
     title: `Answer this viewer question: ${comment.text.slice(0, 80)}`,
     hook: comment.text,
@@ -2727,7 +2897,11 @@ function commentToIdea(commentId) {
     cta: "Ask viewers what they want answered next.",
     source: "Community Manager",
     status: "idea",
-  });
+    createdAt: new Date().toISOString(),
+  };
+  state.ideas.unshift(idea);
+  state.selectedIdeaId = idea.id;
+  toolTabs.ideas = "current";
   saveState();
   toast("Comment turned into an idea.");
 }
@@ -2922,14 +3096,20 @@ function generateThumbnailCanvas() {
   ctx.font = "800 28px Inter, Arial, sans-serif";
   ctx.fillText("CONTENTUS DRAFT", 104, 647);
 
-  state.thumbnails.unshift({
+  const thumbnail = {
     id: `thumb-${Date.now()}`,
     title,
     subtitle,
     palette,
+    source: "local-canvas",
+    previewDataUrl: captureThumbnailPreview(),
     createdAt: new Date().toISOString(),
-  });
+  };
+  state.thumbnails = [thumbnail, ...(state.thumbnails || [])].slice(0, 20);
+  state.selectedThumbnailId = thumbnail.id;
+  toolTabs.thumbnails = "current";
   saveState();
+  render();
   toast("Thumbnail generated locally.");
 }
 
@@ -2968,15 +3148,21 @@ async function handleThumbnailImageV4(button) {
     }
     await drawImageOnThumbnailCanvas(result.data.image);
     finishThumbProgress(true);
-    state.thumbnails.unshift({
+    const thumbnail = {
       id: `thumb-${Date.now()}`,
       title: payload.title,
       subtitle: payload.subtitle,
       style: payload.style,
+      palette: payload.palette,
       source: "ai-image",
+      previewDataUrl: captureThumbnailPreview(),
       createdAt: new Date().toISOString(),
-    });
+    };
+    state.thumbnails = [thumbnail, ...(state.thumbnails || [])].slice(0, 20);
+    state.selectedThumbnailId = thumbnail.id;
+    toolTabs.thumbnails = "current";
     saveState();
+    render();
     toast("AI thumbnail generated.");
   } catch (error) {
     finishThumbProgress(false);
@@ -3022,6 +3208,29 @@ function finishThumbProgress(ok = true) {
     wrap.classList.add("hidden");
     fill.style.width = "0%";
   }, ok ? 600 : 250);
+}
+
+function captureThumbnailPreview() {
+  const canvasNode = document.querySelector("#thumbnail-canvas");
+  if (!canvasNode) return "";
+  try {
+    return canvasNode.toDataURL("image/jpeg", 0.72);
+  } catch {
+    return "";
+  }
+}
+
+function drawSelectedThumbnailPreview() {
+  const thumbnail = currentThumbnail();
+  const canvasNode = document.querySelector("#thumbnail-canvas");
+  if (!thumbnail?.previewDataUrl || !canvasNode) return;
+  const ctx = canvasNode.getContext("2d");
+  const img = new Image();
+  img.onload = () => {
+    ctx.clearRect(0, 0, canvasNode.width, canvasNode.height);
+    ctx.drawImage(img, 0, 0, canvasNode.width, canvasNode.height);
+  };
+  img.src = thumbnail.previewDataUrl;
 }
 
 function drawImageOnThumbnailCanvas(image) {
