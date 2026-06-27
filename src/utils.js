@@ -80,14 +80,6 @@ export function thumbnailPalette(value = "") {
   return { bg1: "#061b1f", bg2: "#190c0b", accent: "#5ee8f2", accent2: "#ff7567" };
 }
 
-export function fallbackThumbnailSuggestions(title) {
-  return [
-    { text: title.slice(0, 32) || "I Tested This", reason: "Keeps the exact idea clear." },
-    { text: "AI Exposed My Process", reason: "Creates curiosity without fake claims." },
-    { text: "Before vs After", reason: "Simple, visual, and low-risk." },
-  ];
-}
-
 export function formatNumber(value) {
   const number = Number(value || 0);
   if (!Number.isFinite(number)) return "0";

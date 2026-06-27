@@ -13,7 +13,7 @@ const WORKSPACE_STATE_DIR = path.join(__dirname, ".contentus-state");
 const WORKSPACE_STATE_FILE = path.join(WORKSPACE_STATE_DIR, "workspaces.json");
 const SUPABASE_URL = normalizeSupabaseProjectUrl(trimEnv("SUPABASE_URL"));
 const SUPABASE_ANON_KEY = trimEnv("SUPABASE_ANON_KEY");
-const FEATHERLESS_API_KEY = trimEnv("FEATHERLESS_API_KEY");
+const FEATHERLESS_API_KEY = trimEnv("FEATHERLESS_API_KEY") || trimEnv("FEATHERLESS_API_KRY");
 const FEATHERLESS_BASE_URL = (trimEnv("FEATHERLESS_BASE_URL") || "https://api.featherless.ai/v1").replace(/\/+$/, "");
 const FEATHERLESS_MODEL = trimEnv("FEATHERLESS_MODEL") || "Qwen/Qwen2.5-72B-Instruct";
 const FEATHERLESS_VISION_MODEL = trimEnv("FEATHERLESS_VISION_MODEL") || "Qwen/Qwen2.5-VL-72B-Instruct";
@@ -47,6 +47,15 @@ const mimeTypes = {
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
 };
+
+class ApiError extends Error {
+  constructor(status, error, message = "") {
+    super(message || error);
+    this.status = status;
+    this.publicError = error;
+    this.publicMessage = message;
+  }
+}
 
 function loadEnvFile() {
   const envPath = path.join(__dirname, ".env");
@@ -114,7 +123,10 @@ const server = createServer(async (request, response) => {
 
     await serveStatic(response, url.pathname);
   } catch (error) {
-    sendJson(response, 500, { error: "Internal server error", detail: error.message });
+    sendJson(response, error.status || 500, {
+      error: error.publicError || "Internal server error",
+      message: error.publicMessage || error.message,
+    });
   }
 });
 
@@ -178,7 +190,7 @@ async function handleApi(request, response, url) {
       app: "Contentus",
       integrations: integrationStatus(),
       authProvider: integrationStatus().supabase ? "supabase" : "not-configured",
-      aiProvider: integrationStatus().featherless ? "featherless" : "local-fallback",
+      aiProvider: integrationStatus().featherless ? "featherless" : "not-configured",
       youtubeProvider: integrationStatus().youtubeData ? "youtube-data-api" : "not-configured",
     });
     return;
@@ -751,7 +763,6 @@ function redirectHtml(response, route, message) {
 async function generateCreatorDna(body = {}) {
   const youtubeContext = body.youtubeUrl ? await fetchYouTubeContext(body.youtubeUrl) : null;
   const mediaNote = body.media?.truncated ? "Uploaded media was trimmed before analysis to keep the request lightweight." : "";
-  const fallback = fallbackDna(body, youtubeContext, mediaNote);
   const prompt = `
 You are Contentus, a creator voice profiler. Analyze the creator's real samples and return only JSON.
 
@@ -787,19 +798,20 @@ Return this JSON shape:
 
 Rules: do not invent private facts. If data is thin, say what is uncertain. Preserve originality and warn against copying.
 `;
-  const result = await callFeatherlessJson(prompt, fallback, {
+  const result = await callFeatherlessJson(prompt, {
     media: body.media,
     temperature: 0.25,
   });
+  if (!result || typeof result !== "object" || !Number.isFinite(Number(result.score))) {
+    throw new ApiError(502, "Creator DNA generation failed", "Featherless returned an invalid Creator DNA profile.");
+  }
   return {
-    ...fallback,
     ...result,
-    mediaNote: [mediaNote, youtubeContext?.note, result.mediaNote, result.warning].filter(Boolean).join(" "),
+    mediaNote: [mediaNote, youtubeContext?.note, result.mediaNote].filter(Boolean).join(" "),
   };
 }
 
 async function generateIdeasWithAi(body = {}) {
-  const fallback = fallbackIdeas(body);
   const prompt = `
 Generate 5 original Contentus ideas for a creator. Return only JSON:
 {
@@ -834,14 +846,17 @@ ${JSON.stringify(body, null, 2)}
 Rules: no copying, no fake trend claims, no spam growth tactics, include a real personalization tip for every idea.
 For hit/miss: "hitProbability" is an honest 0-100 estimate of whether this idea will perform for THIS creator on THIS platform/goal — not hype. Base it on hook strength, audience fit, originality vs. saturation, and emotional pull. "verdict" must agree with the number (>=65 hit, 45-64 coin flip, <45 miss). "hitReasons" are 2-3 concrete reasons it could land; "missRisks" are 1-3 honest reasons it could flop. Be willing to predict a miss.
 `;
-  const result = await callFeatherlessJson(prompt, { ideas: fallback }, { temperature: 0.55 });
-  return normalizeArray(result.ideas).length ? result.ideas : fallback;
+  const result = await callFeatherlessJson(prompt, { temperature: 0.55 });
+  const ideas = normalizeArray(result.ideas);
+  if (!ideas.length) {
+    throw new ApiError(502, "Idea generation failed", "Featherless returned no ideas.");
+  }
+  return ideas;
 }
 
 async function generateScriptWithAi(body = {}) {
   const lengthLabel = String(body.length || body.existingScript?.lengthLabel || "60 seconds");
   const targetWords = targetWordsFromLength(lengthLabel);
-  const fallback = fallbackScript(body, targetWords);
   const prompt = `
 You are a scriptwriter for a specific creator. Write the ACTUAL WORDS they will say out loud on camera. Return only JSON.
 
@@ -880,21 +895,18 @@ Return this JSON:
 
 "sections" is the spoken script broken into labeled beats, e.g. labels like "Hook", "Setup", "Main point 1", "Main point 2", "Payoff", "Call to action". For short videos use 3-5 sections; for long videos use more. Each "spoken" value is the exact words to say for that beat.
 `;
-  const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.6 });
+  const result = await callFeatherlessJson(prompt, { temperature: 0.6 });
   const sections = normalizeArray(result.sections).filter((s) => s && (s.spoken || s.label));
-  const script = { ...fallback, ...result, sections, targetLength: result.targetLength || lengthLabel };
-  // Build the flat "script" string from sections so it renders cleanly and stays
-  // consistent. Only fall back to the model's raw script (or local seed) if no sections.
+  const script = { ...result, sections, targetLength: result.targetLength || lengthLabel };
   if (sections.length) {
     script.script = sections.map((s) => `${(s.label || "").toUpperCase()}\n${(s.spoken || "").trim()}`.trim()).join("\n\n");
   } else if (!String(script.script || "").trim()) {
-    script.script = fallback.script;
+    throw new ApiError(502, "Script generation failed", "Featherless returned no script text.");
   }
   return script;
 }
 
 async function generateAdStudioWithAi(body = {}) {
-  const fallback = fallbackAdProject(body);
   const prompt = `
 You are Contentus Ad and Short Film Studio. Return only JSON.
 
@@ -935,13 +947,15 @@ Return:
 
 Rules: flag unsafe claims, avoid deepfake/likeness misuse, include an AI disclosure line if AI assisted. "voiceover" must be the exact words a narrator can speak, not direction about tone.
 `;
-  const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.5 });
-  return { ...fallback, ...result, versions: normalizeArray(result.versions).length ? result.versions : fallback.versions };
+  const result = await callFeatherlessJson(prompt, { temperature: 0.5 });
+  if (!result || typeof result !== "object" || !String(result.script || result.concept || "").trim()) {
+    throw new ApiError(502, "Ad Studio generation failed", "Featherless returned an invalid ad or film project.");
+  }
+  return { ...result, versions: normalizeArray(result.versions) };
 }
 
 async function generateThumbnailCopy(body = {}) {
   const title = body.idea?.title || "creator idea";
-  const fallback = fallbackThumbnailCopy(title);
   const prompt = `
 Return only JSON: {"suggestions":[{"text":string,"reason":string}]}
 Create 3 thumbnail text options under 32 characters.
@@ -950,12 +964,15 @@ Style: ${body.style || "clean proof"}
 Creator DNA: ${JSON.stringify(body.dna || {})}
 Use very few words. No clickbait lies.
 `;
-  const result = await callFeatherlessJson(prompt, { suggestions: fallback }, { temperature: 0.35, maxOutputTokens: 350 });
-  return normalizeArray(result.suggestions).length ? result.suggestions : fallback;
+  const result = await callFeatherlessJson(prompt, { temperature: 0.35, maxOutputTokens: 350 });
+  const suggestions = normalizeArray(result.suggestions);
+  if (!suggestions.length) {
+    throw new ApiError(502, "Thumbnail copy generation failed", "Featherless returned no thumbnail copy suggestions.");
+  }
+  return suggestions;
 }
 
 async function scoreAuthenticityWithAi(body = {}) {
-  const fallback = fallbackAuthenticity(body.text || "", body.dna);
   const prompt = `
 You are Contentus Authenticity Guard. Compare the content with the Creator DNA. Return only JSON:
 {
@@ -985,19 +1002,15 @@ ${String(body.text || "").slice(0, 14000)}
 
 Rules: encourage originality, flag generic AI style, risky claims, copied inspiration, and missing disclosure.
 `;
-  return callFeatherlessJson(prompt, fallback, { temperature: 0.25 });
+  const result = await callFeatherlessJson(prompt, { temperature: 0.25 });
+  if (!result || typeof result !== "object" || !Number.isFinite(Number(result.authenticityScore))) {
+    throw new ApiError(502, "Authenticity scoring failed", "Featherless returned an invalid authenticity report.");
+  }
+  return result;
 }
 
 async function generateCommunityReplies(body = {}) {
   const comments = normalizeArray(body.comments).slice(0, 40);
-  const fallback = {
-    comments: comments.map((comment) => ({
-      ...comment,
-      sentiment: comment.sentiment || sentimentFor(comment.text || ""),
-      importance: comment.importance || importanceFor(comment.text || ""),
-      suggestedReply: comment.suggestedReply || fallbackReply(comment.text || ""),
-    })),
-  };
   const prompt = `
 You write reply drafts AS the creator, replying to their own YouTube viewers. Return only JSON:
 {"comments":[{"id":string,"author":string,"text":string,"sentiment":string,"importance":string,"suggestedReply":string,"videoIdea":string}]}
@@ -1026,8 +1039,12 @@ For toxic/troll comments: write a short, unbothered, classy reply (or note it is
 sentiment = positive | neutral | negative. importance = high | medium | low (questions and repeated themes are high).
 videoIdea = a short next-video idea only when the comment clearly suggests one, else "".
 `;
-  const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.7 });
-  return { comments: normalizeArray(result.comments).length ? result.comments : fallback.comments };
+  const result = await callFeatherlessJson(prompt, { temperature: 0.7 });
+  const replies = normalizeArray(result.comments);
+  if (!replies.length && comments.length) {
+    throw new ApiError(502, "Community replies failed", "Featherless returned no reply drafts.");
+  }
+  return { comments: replies };
 }
 
 async function analyzeTrendsWithAi(body = {}) {
@@ -1054,13 +1071,12 @@ async function analyzeTrendsWithAi(body = {}) {
         tags: normalizeArray(item.snippet?.tags).slice(0, 6),
       })).filter((v) => v.title);
     } catch (error) {
-      note = `Live YouTube trends could not be fetched (${error.message}); showing pattern-based analysis instead.`;
+      note = `Live YouTube trends could not be fetched (${error.message}); Featherless analyzed the available creator context only.`;
     }
   } else {
-    note = "Set YOUTUBE_DATA_API_KEY to pull live trending videos. Showing pattern-based analysis for now.";
+    note = "Set YOUTUBE_DATA_API_KEY to pull live YouTube trends. Featherless analyzed the available creator context only.";
   }
 
-  const fallback = fallbackTrends(niche, platform, sourceVideos);
   const prompt = `
 You are Contentus Trend Analyser. Help a specific creator ride trends without copying. Return only JSON:
 {
@@ -1078,14 +1094,20 @@ Creator DNA: ${JSON.stringify(body.dna || {}, null, 2)}
 
 Rules: identify the underlying FORMAT/PATTERN behind what is trending, not just the topics. For each trend give a "creatorAngle" that fits THIS creator's niche and voice — never tell them to copy a video. "riskNote" flags saturation, fad risk, or licensing/audio concerns. "audioTrends" approximates trending sounds/music styles for the platform (note these are approximations, not licensed picks). Be honest when a trend is already saturated.
 `;
-  const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.5 });
+  const result = await callFeatherlessJson(prompt, { temperature: 0.5 });
+  const trends = normalizeArray(result.trends);
+  const topics = normalizeArray(result.topics);
+  const audioTrends = normalizeArray(result.audioTrends);
+  if (!trends.length && !topics.length && !audioTrends.length) {
+    throw new ApiError(502, "Trend analysis failed", "Featherless returned no trend insights.");
+  }
   return {
-    summary: result.summary || fallback.summary,
-    trends: normalizeArray(result.trends).length ? result.trends : fallback.trends,
-    topics: normalizeArray(result.topics).length ? result.topics : fallback.topics,
-    audioTrends: normalizeArray(result.audioTrends).length ? result.audioTrends : fallback.audioTrends,
+    summary: result.summary || "",
+    trends,
+    topics,
+    audioTrends,
     sourceVideos: sourceVideos.slice(0, 10),
-    note: [note, result.warning].filter(Boolean).join(" "),
+    note,
   };
 }
 
@@ -1106,31 +1128,6 @@ function trendCategoryId(category) {
   return map[String(category || "").toLowerCase()] || undefined;
 }
 
-function fallbackTrends(niche, platform, sourceVideos = []) {
-  const topTitles = sourceVideos.slice(0, 6).map((v) => v.title);
-  return {
-    summary: `Pattern read for ${niche} on ${platform}: short, proof-led hooks and "I tried/tested X" framing keep outperforming generic explainers. Lead with a concrete result in the first 3 seconds.`,
-    trends: [
-      {
-        title: "Proof-over-promise experiments",
-        pattern: "Creator tests a claim on their own real workflow and shows the messy result.",
-        why: "Audiences trust demonstrated results more than advice.",
-        creatorAngle: `Run a real ${niche} experiment and show your actual before/after, including what failed.`,
-        riskNote: "Common format — your specific data and personality are what differentiate it.",
-      },
-      {
-        title: "Fast contrarian takes",
-        pattern: "A confident, specific counter-opinion delivered in under 45 seconds.",
-        why: "Sparks comments and shares through respectful disagreement.",
-        creatorAngle: `Name one popular ${niche} belief you think is wrong and back it with your experience.`,
-        riskNote: "Stay specific and fair — avoid rage-bait that damages trust.",
-      },
-    ],
-    topics: topTitles.length ? topTitles : [`${niche} myths`, `${niche} starter mistakes`, `behind-the-scenes of your ${niche} process`],
-    audioTrends: ["Upbeat lo-fi / chill beats for talking-head b-roll", "Punchy transition stingers for fast cuts", "Trending pop snippet for hook reveals (verify licensing before use)"],
-  };
-}
-
 async function analyzeVideoWithAi(body = {}) {
   let youtubeContext = null;
   let note = "";
@@ -1142,7 +1139,6 @@ async function analyzeVideoWithAi(body = {}) {
     note = "Add a YouTube URL or upload a video/clip to analyze.";
   }
 
-  const fallback = fallbackVideoCheck(body, youtubeContext);
   const prompt = `
 You are Contentus Video Checker. Review a creator's video before they publish and give honest, specific feedback. Return only JSON:
 {
@@ -1168,35 +1164,13 @@ ${body.media ? "An uploaded video/clip is attached — analyze the actual footag
 
 Rules: all numeric scores are 0-100 and honest — do not inflate. "firstThreeSeconds" critiques the opening hook specifically. "improvements" are concrete, ordered by impact. Be willing to say a video needs work.
 `;
-  const result = await callFeatherlessJson(prompt, fallback, { media: body.media, temperature: 0.4 });
+  const result = await callFeatherlessJson(prompt, { media: body.media, temperature: 0.4 });
+  if (!result || typeof result !== "object" || !Number.isFinite(Number(result.scoreOverall))) {
+    throw new ApiError(502, "Video analysis failed", "Featherless returned an invalid video analysis.");
+  }
   return {
-    ...fallback,
     ...result,
-    note: [note, result.warning].filter(Boolean).join(" "),
-  };
-}
-
-function fallbackVideoCheck(body = {}, youtubeContext = null) {
-  const hasTranscript = Boolean(youtubeContext?.transcript);
-  return {
-    scoreOverall: youtubeContext || body.media ? 74 : 0,
-    verdict: youtubeContext || body.media ? "Fix a few things" : "Needs work",
-    hookStrength: 70,
-    retention: 68,
-    pacing: 72,
-    audio: 75,
-    clarity: 76,
-    firstThreeSeconds: hasTranscript
-      ? "Your opening states the topic but doesn't promise a payoff. Lead with the result or the stakes instead of the setup."
-      : "Make sure the first line names a concrete payoff or tension within 3 seconds — don't open with a greeting or channel intro.",
-    strengths: ["Clear topic focus.", "Consistent on-camera energy."],
-    improvements: [
-      "Cut the first 2-4 seconds so the hook lands immediately.",
-      "Add on-screen text reinforcing the promise during the intro.",
-      "Tighten any section longer than ~20 seconds without a visual change.",
-    ],
-    thumbnailAdvice: "Use 3-4 high-contrast words that match the spoken hook; avoid vague AI phrasing.",
-    titleAdvice: "Front-load the specific outcome or number; keep it under ~60 characters.",
+    note,
   };
 }
 
@@ -1227,7 +1201,6 @@ async function generateThumbnailImage(body = {}) {
 // image model can actually draw (no text/title echoed back). Falls back to a simple
 // symbolic description if the text model is unavailable.
 async function describeThumbnailScene({ title, subtitle, style, palette, dna }) {
-  const fallback = { scene: `A striking, symbolic photoreal scene that visually represents the topic "${title}".` };
   const prompt = `You write prompts for an AI image generator that creates YouTube thumbnail BACKGROUNDS.
 Turn the video below into ONE concrete, literal visual scene a text-to-image model can draw: name a real subject, setting, objects, action, and mood using concrete nouns.
 Hard rules:
@@ -1242,8 +1215,11 @@ ${subtitle ? `Subtitle: ${subtitle}` : ""}
 Desired mood/style: ${style}
 Color palette: ${palette}
 ${dna?.visual ? `Creator's visual style to honor: ${dna.visual}` : ""}`;
-  const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.8, maxOutputTokens: 220 });
-  const scene = (typeof result?.scene === "string" && result.scene.trim()) ? result.scene.trim() : fallback.scene;
+  const result = await callFeatherlessJson(prompt, { temperature: 0.8, maxOutputTokens: 220 });
+  const scene = (typeof result?.scene === "string" && result.scene.trim()) ? result.scene.trim() : "";
+  if (!scene) {
+    throw new ApiError(502, "Thumbnail scene generation failed", "Featherless returned no usable image prompt.");
+  }
   return scene.slice(0, 600);
 }
 
@@ -1632,8 +1608,10 @@ async function youtubeApi(resource, params = {}) {
   return data;
 }
 
-async function callFeatherlessJson(prompt, fallback, options = {}) {
-  if (!configured(FEATHERLESS_API_KEY)) return fallback;
+async function callFeatherlessJson(prompt, options = {}) {
+  if (!configured(FEATHERLESS_API_KEY)) {
+    throw new ApiError(501, "Featherless API is not configured", "Set FEATHERLESS_API_KEY in .env and restart the server.");
+  }
   const mediaPayload = featherlessMessageContent(prompt, options.media);
   const model = mediaPayload.usesImage ? FEATHERLESS_VISION_MODEL : FEATHERLESS_MODEL;
 
@@ -1655,18 +1633,27 @@ async function callFeatherlessJson(prompt, fallback, options = {}) {
       }),
     });
     const text = await result.text();
-    const payload = text ? JSON.parse(text) : {};
+    let payload = {};
+    try {
+      payload = text ? JSON.parse(text) : {};
+    } catch {
+      throw new ApiError(502, "Featherless returned invalid JSON", text.slice(0, 240));
+    }
     if (!result.ok) {
-      return { ...fallback, warning: payload.error?.message || `Featherless request failed with ${result.status}` };
+      throw new ApiError(result.status, "Featherless request failed", payload.error?.message || `Featherless request failed with ${result.status}`);
     }
     const output = payload.choices?.[0]?.message?.content || "";
-    const parsed = parseJsonOutput(output, fallback);
+    if (!output.trim()) {
+      throw new ApiError(502, "Featherless returned no content", "The model response was empty.");
+    }
+    const parsed = parseJsonOutput(output);
     if (mediaPayload.warning && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
       return { ...parsed, warning: [parsed.warning, mediaPayload.warning].filter(Boolean).join(" ") };
     }
     return parsed;
   } catch (error) {
-    return { ...fallback, warning: error.message };
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(502, "Featherless request failed", error.name === "TimeoutError" ? "Featherless request timed out." : error.message);
   }
 }
 
@@ -1699,213 +1686,20 @@ function featherlessMessageContent(prompt, media = null) {
   };
 }
 
-function parseJsonOutput(output, fallback) {
+function parseJsonOutput(output) {
   try {
     return JSON.parse(output);
   } catch {
     const match = output.match(/```(?:json)?\s*([\s\S]*?)```/) || output.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
-    if (!match) return fallback;
+    if (!match) {
+      throw new ApiError(502, "Featherless returned invalid JSON", "The model did not return parseable JSON.");
+    }
     try {
       return JSON.parse(match[1]);
     } catch {
-      return fallback;
+      throw new ApiError(502, "Featherless returned invalid JSON", "The model returned malformed JSON.");
     }
   }
-}
-
-function fallbackDna(body = {}, youtubeContext = null, mediaNote = "") {
-  const creator = body.creator || {};
-  const samples = `${body.samples || ""} ${youtubeContext?.transcript || ""} ${youtubeContext?.title || ""}`.toLowerCase();
-  const hasPersonal = /\bi\b|\bmy\b|\bwe\b|story|honest|real/.test(samples);
-  const hasHumor = /funny|joke|chaos|roast|lol|sarcastic/.test(samples);
-  const tones = normalizeArray(creator.tone);
-  return {
-    score: body.samples || body.media || youtubeContext ? (hasPersonal ? 84 : 72) : 45,
-    tone: tones.length ? `${tones.join(", ")} with creator-specific clarity.` : "Not enough samples yet. Add more real content to sharpen tone.",
-    humor: hasHumor ? "Self-aware and conversational." : "Not enough humor evidence yet.",
-    phrases: extractPhrases(body.samples || ""),
-    story: hasPersonal ? "Leads with a real situation, then turns it into a practical takeaway." : "Needs more real examples to infer storytelling style.",
-    visual: "Infer from uploaded video, YouTube context, and creator notes when available.",
-    themes: splitTopics(creator.topicsLoved || creator.niche || ""),
-    audienceType: creator.audience || "Audience not defined yet.",
-    editingPace: "Use the creator's platform and samples to choose pacing.",
-    hookStyle: "Specific problem or experiment, then fast proof.",
-    language: "Clear, direct, and human.",
-    emotional: "Supportive and honest.",
-    avoid: creator.topicsAvoided || "Generic AI filler, copying, unsafe claims, and undisclosed synthetic media.",
-    examplesLike: extractExampleLines(body.samples || "").slice(0, 3),
-    examplesUnlike: ["Unlock limitless success today.", "This revolutionary hack guarantees growth.", "Effortlessly transform your life forever."],
-    brandValues: creator.values || "",
-    mediaNote,
-  };
-}
-
-function fallbackIdeas(body = {}) {
-  const topic = body.topic || "creator workflow";
-  const platform = body.platform || "YouTube";
-  const type = body.contentType || "content";
-  return [
-    {
-      title: `I Tested ${topic} With My Real Workflow`,
-      hook: `I tried ${topic} for my actual content process, and the useful part was not what I expected.`,
-      concept: "A real creator experiment that shows the messy baseline, the test, and the practical result.",
-      why: "It gives the audience proof instead of generic advice.",
-      platform,
-      platformFit: `${platform} works because the idea has a clear before/after arc.`,
-      contentType: type,
-      emotional: "Curiosity plus useful honesty.",
-      shortFormVersion: "Show the problem, one surprising result, and one takeaway.",
-      longFormVersion: "Document the full process, mistakes, results, and next system.",
-      genericRisk: "Low",
-      authenticityScore: 84,
-      hitProbability: 71,
-      verdict: "Likely hit",
-      hitReasons: ["Clear before/after arc keeps people watching for the result.", "Proof-based format builds trust instead of hype."],
-      missRisks: ["Needs a strong first-line hook or the payoff feels far away."],
-      personalizationTip: "Add one screenshot, old draft, calendar, voice note, or behind-the-scenes proof from your own process.",
-      cta: "Ask viewers what they want you to test next.",
-      disclosure: "Brainstormed with AI, written and edited by me.",
-    },
-    {
-      title: `The ${topic} Mistake That Makes Content Sound Generic`,
-      hook: "This looks productive, but it is exactly why the draft stops sounding like you.",
-      concept: "Break down one common creator mistake and rewrite it using the creator's real style.",
-      why: "It helps the audience improve without copying someone else's voice.",
-      platform,
-      platformFit: "Strong for education, commentary, and creator trust.",
-      contentType: type,
-      emotional: "Tough love with a fix.",
-      shortFormVersion: "Show a bad line, a better line, and the reason.",
-      longFormVersion: "Analyze multiple examples and build a reusable checklist.",
-      genericRisk: "Medium",
-      authenticityScore: 79,
-      hitProbability: 52,
-      verdict: "Coin flip",
-      hitReasons: ["Mistake-and-fix framing is highly shareable.", "Teaches without telling people to copy a voice."],
-      missRisks: ["The 'sounds generic' angle is getting crowded — needs a sharper, specific example.", "Payoff is educational, so it leans on a strong thumbnail/title to earn the click."],
-      personalizationTip: "Use a sentence you actually rejected and explain why.",
-      cta: "Invite people to paste a line they want rewritten.",
-      disclosure: "AI-assisted if Contentus helped rewrite.",
-    },
-  ];
-}
-
-function fallbackScript(body = {}, targetWords = 150) {
-  const idea = body.idea?.title || body.idea || body.existingScript?.title || "Creator idea";
-  const format = body.format || body.existingScript?.format || "talking head";
-  const script = expandScriptLocally(`Okay, so everyone keeps talking about ${idea} — so I actually tried it, and here's what really happened.`, targetWords, body);
-  return {
-    title: idea,
-    targetLength: body.length || "60 seconds",
-    authenticityScore: 82,
-    genericRisk: "Low",
-    personalizationTip: "Add a real screenshot, failed take, comment, or personal example before publishing.",
-    disclosure: "AI-assisted draft. Final story and edits should be reviewed by the creator.",
-    hookOptions: [
-      `I tested ${idea}, and the first result exposed the real problem.`,
-      "This sounded like a good idea until I tried it in my actual workflow.",
-      "I wanted faster content, but I did not want to sound like everyone else.",
-    ],
-    script,
-    scenes: [
-      "Cold open with the real problem.",
-      `Show the ${format} setup and why the audience should care.`,
-      "Walk through the test or story beats.",
-      "Reveal the useful result and the honest limitation.",
-      "Close with a specific viewer action.",
-    ],
-    voiceover: "Keep the voice direct, specific, and rooted in the creator's own proof.",
-    shotList: ["Creator on camera", "Proof artifact", "Screen recording", "Before/after line", "Final takeaway"],
-    broll: ["Notes app", "Timeline or calendar", "Draft comparison", "Audience comment", "Publishing checklist"],
-    onScreenText: ["The problem", "The test", "The result", "Make it yours"],
-    caption: `${idea}. Created with Creator DNA and checked for generic risk.`,
-    hashtags: ["#creatorworkflow", "#contentstrategy", "#aicreator"],
-    endingOptions: ["Want the exact workflow?", "Which version sounds more human?", "Send me the next idea to test."],
-  };
-}
-
-function expandScriptLocally(seed, targetWords, body = {}) {
-  const idea = body.idea?.title || body.idea || "this idea";
-  const beats = [
-    seed,
-    `Quick context, because it matters: ${idea} sounds great on paper, but the moment you actually do it, a few things get weird.`,
-    "First thing I noticed — the part nobody really warns you about — is that the easy version and the real version are not the same thing at all.",
-    "So here's what I actually did. I kept it simple, I tracked what worked, and I paid attention to the parts that felt off.",
-    "And the result? Honestly, not what I expected. The useful bit wasn't the shiny promise — it was the small thing it changed in how I work.",
-    "If you take one thing from this: don't copy it line for line. Steal the idea, make it yours, and cut anything that doesn't sound like you.",
-    "That's basically it. If you want me to go deeper on any part of this, tell me in the comments and I'll make the next one.",
-  ];
-  const words = [];
-  while (words.length < targetWords) {
-    for (const beat of beats) {
-      words.push(...beat.split(/\s+/));
-      if (words.length >= targetWords) break;
-    }
-  }
-  return words.slice(0, targetWords).join(" ");
-}
-
-function fallbackAdProject(body = {}) {
-  const idea = body.idea || "creator product";
-  return {
-    title: `${body.projectType || "Ad"} for ${idea}`.slice(0, 120),
-    concept: `A creator-led concept that makes ${idea} feel useful without exaggerated claims.`,
-    script: `Open on the real creator problem. Show the product or story in use. Admit the honest limitation. End with a simple CTA: ${body.cta || "try it if it fits your workflow"}.`,
-    sceneList: ["Problem", "Real use", "Proof", "Honest limitation", "CTA"],
-    shotList: ["Creator close-up", "Product/action shot", "Result shot", "Caption overlay", "CTA end card"],
-    storyboard: ["Hook frame", "Context frame", "Action frame", "Result frame", "CTA frame"],
-    voiceover: `I wanted ${idea} to solve a real problem, not just look good on camera. Here is what it does, where it helps, and the honest reason I would use it.`,
-    dialogue: ["I wanted this to solve a real problem, not just look good on camera."],
-    musicMood: body.mood || "clean and focused",
-    visualPrompts: [`Creator studio scene for ${idea}, premium but practical, no fake claims.`],
-    caption: `${idea} concept built with Creator DNA and checked for authenticity.`,
-    thumbnailText: "Real Test",
-    platformVersions: [`${body.platform || "YouTube"} version`, "Short-form cut", "Caption-first version"],
-    disclosure: "AI-assisted concept, written and edited by the creator.",
-    recommendedVersion: "Cinematic version",
-    versions: ["Emotional version", "Funny version", "Cinematic version"].map((name, index) => ({
-      name,
-      concept: `${name} of ${idea}`,
-      script: index === 1 ? "Make the generic version the joke, then show the real creator version." : "Show the problem, proof, and honest CTA.",
-      bestForPlatform: body.platform || "YouTube",
-      audienceFit: body.audience || "Creator audience",
-      authenticityScore: 82 + index * 3,
-      viralPotential: index === 1 ? "Medium-high" : "Medium",
-      riskLevel: "Low",
-      recommended: index === 2,
-    })),
-  };
-}
-
-function fallbackThumbnailCopy(title) {
-  const clean = String(title || "Creator Idea").replace(/[^\w\s]/g, "").trim();
-  return [
-    { text: clean.slice(0, 32) || "I Tested This", reason: "Specific and direct." },
-    { text: "AI Exposed This", reason: "Curiosity without a false claim." },
-    { text: "Before vs After", reason: "Easy to understand visually." },
-  ];
-}
-
-function fallbackAuthenticity(text = "", dna = {}) {
-  const clean = String(text).toLowerCase();
-  const genericHits = ["unlock", "revolutionary", "effortless", "ultimate", "guarantee", "game-changing"].filter((word) => clean.includes(word)).length;
-  const personalHits = [" i ", " my ", " we ", "real", "honest", "story", "messy", "specific"].filter((word) => ` ${clean} `.includes(word)).length;
-  const score = Math.max(35, Math.min(94, 70 + personalHits * 4 - genericHits * 11));
-  return {
-    authenticityScore: score,
-    voiceMatch: Math.max(35, Math.min(96, score + 2)),
-    toneMatch: Math.max(35, Math.min(96, score - 1)),
-    audienceFit: Math.max(35, Math.min(96, score + 3)),
-    originalityScore: Math.max(30, Math.min(95, score - genericHits * 3)),
-    genericRisk: genericHits > 1 ? "High" : genericHits ? "Medium" : "Low",
-    emotionalBelievability: Math.max(35, Math.min(95, score - 2)),
-    brandSafety: genericHits > 1 ? 70 : 90,
-    label: score > 84 ? "Strong match" : score > 64 ? "Needs more personal voice" : "Too generic",
-    feedback: genericHits ? "Remove inflated AI-style claims and add one real creator detail." : "The draft is reasonably specific. Add more creator proof to strengthen it.",
-    suggestions: ["Add a real example.", "Remove broad claims.", "Use one phrase your audience recognizes."],
-    rewrittenVersion: "I tried this in my actual workflow, and the useful part was not the shiny promise. It was what it exposed about my process.",
-    disclosureRecommendation: clean.includes("ai") ? "AI-assisted disclosure recommended." : "Disclosure optional unless AI visuals, voice, or sponsorship are involved.",
-  };
 }
 
 function targetWordsFromLength(label = "") {
@@ -1984,13 +1778,6 @@ function importanceFor(text = "") {
   if (/\?|tutorial|show|exact|prompt|part 2|video/.test(clean)) return "high";
   if (/hate|trash|wrong|copied/.test(clean)) return "medium";
   return "normal";
-}
-
-function fallbackReply(text = "") {
-  if (/\?|how|can you|show/i.test(text)) return "Yes. I can turn this into a clearer walkthrough and show the exact process in a follow-up.";
-  if (/love|thanks|helped/i.test(text)) return "Thank you. I am glad it helped, and I will keep the next one just as practical.";
-  if (/wrong|copied|bad|fake/i.test(text)) return "Fair pushback. I will make the next version more specific with my own proof and clearer sources.";
-  return "Appreciate you watching. I am noting this for the next version.";
 }
 
 function stripHtml(value = "") {

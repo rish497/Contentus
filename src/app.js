@@ -13,7 +13,6 @@ import {
   calendarCells,
   calendarRange,
   escapeHtml,
-  fallbackThumbnailSuggestions,
   formatDate,
   formatInputDate,
   formatNumber,
@@ -45,7 +44,7 @@ let appConfig = {
     sessionSecret: false,
   },
   authProvider: "not-configured",
-  aiProvider: "local-fallback",
+  aiProvider: "not-configured",
 };
 const ELEVEN_DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"; // Rachel (ElevenLabs premade)
 let saveTimer = null;
@@ -262,7 +261,7 @@ function creatorDisplayName() {
 }
 
 function moneylessApiNote() {
-  return "Demo mode uses deterministic local AI. Add Featherless, Supabase, Gemini image, and Google keys later for real integrations.";
+  return "AI generation requires Featherless. Add FEATHERLESS_API_KEY and restart the server to generate real outputs.";
 }
 
 function dnaLogo(label = true) {
@@ -3039,7 +3038,15 @@ async function handleThumbnailCopy(button) {
       dna: state.dna,
     };
     const result = await apiJson("/api/ai/thumbnail-copy", { method: "POST", body: payload });
-    const suggestions = result.ok ? normalizeList(result.data.suggestions) : fallbackThumbnailSuggestions(payload.idea?.title || "Creator idea");
+    if (!result.ok) {
+      toast(result.data.message || result.data.error || "Thumbnail text generation failed.");
+      return;
+    }
+    const suggestions = normalizeList(result.data.suggestions);
+    if (!suggestions.length) {
+      toast("Featherless returned no thumbnail text suggestions.");
+      return;
+    }
     document.querySelector("#thumbnail-copy-output").innerHTML = `
       <div class="card-topline"><div><span class="section-kicker">Title options</span><h3>Low-token suggestions</h3></div></div>
       <div class="list-stack">${suggestions.map((item) => insight(item.text || item, item.reason || "Short, specific, and thumbnail-friendly.")).join("")}</div>
@@ -3432,11 +3439,11 @@ function toTextList(value) {
 }
 
 function normalizeDnaResult(dna) {
-  const fallback = safeDna();
+  const base = safeDna();
   return {
-    ...fallback,
+    ...base,
     ...dna,
-    score: Number(dna.score || dna.creatorDnaScore || 72),
+    score: Number(dna.score || dna.creatorDnaScore || 0),
     phrases: normalizeStringArray(dna.phrases || dna.commonPhrases),
     themes: normalizeStringArray(dna.themes || dna.contentThemes),
     examplesLike: normalizeStringArray(dna.examplesLike || dna.soundsLikeYou),
