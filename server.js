@@ -16,7 +16,7 @@ const SUPABASE_ANON_KEY = trimEnv("SUPABASE_ANON_KEY");
 const FEATHERLESS_API_KEY = trimEnv("FEATHERLESS_API_KEY");
 const FEATHERLESS_BASE_URL = (trimEnv("FEATHERLESS_BASE_URL") || "https://api.featherless.ai/v1").replace(/\/+$/, "");
 const FEATHERLESS_MODEL = trimEnv("FEATHERLESS_MODEL") || "Qwen/Qwen2.5-72B-Instruct";
-const FEATHERLESS_VISION_MODEL = trimEnv("FEATHERLESS_VISION_MODEL") || FEATHERLESS_MODEL;
+const FEATHERLESS_VISION_MODEL = trimEnv("FEATHERLESS_VISION_MODEL") || "Qwen/Qwen2.5-VL-72B-Instruct";
 const GEMINI_API_KEY = trimEnv("GEMINI_API_KEY");
 const ELEVENLABS_API_KEY = trimEnv("ELEVENLABS_API_KEY");
 const ELEVENLABS_BASE_URL = (trimEnv("ELEVENLABS_BASE_URL") || "https://api.elevenlabs.io/v1").replace(/\/+$/, "");
@@ -933,7 +933,7 @@ Return:
   ]
 }
 
-Rules: flag unsafe claims, avoid deepfake/likeness misuse, include an AI disclosure line if AI assisted.
+Rules: flag unsafe claims, avoid deepfake/likeness misuse, include an AI disclosure line if AI assisted. "voiceover" must be the exact words a narrator can speak, not direction about tone.
 `;
   const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.5 });
   return { ...fallback, ...result, versions: normalizeArray(result.versions).length ? result.versions : fallback.versions };
@@ -1205,7 +1205,12 @@ async function generateThumbnailImage(body = {}) {
   const subtitle = (body.subtitle || "").slice(0, 80);
   const style = body.style || "clean proof";
   const palette = body.palette || "high-contrast cyan, coral, gold on near-black";
-  const imagePrompt = `A bold, high-contrast 16:9 YouTube thumbnail background, ${style} style, color palette: ${palette}. Cinematic lighting, strong focal subject, lots of negative space on the left for large headline text, no text rendered in the image, no watermark, photoreal but punchy. Theme: ${title}. ${subtitle ? `Secondary idea: ${subtitle}.` : ""} ${body.dna?.visual ? `Match this creator's visual style: ${body.dna.visual}.` : ""}`.trim();
+
+  // Headlines like "I Tested AI With My Real Workflow" are abstract — feeding them
+  // straight to the image model makes it render gibberish "text" and unrelated art.
+  // So first turn the headline into a concrete visual SCENE, then render that.
+  const scene = await describeThumbnailScene({ title, subtitle, style, palette, dna: body.dna });
+  const imagePrompt = `${scene} Cinematic, dramatic lighting, bold high-contrast colors (${palette}), ${style} style, professional YouTube thumbnail composition with one clear focal subject and generous empty negative space on the LEFT third for a headline overlay. Photoreal, sharp, punchy, high detail. Absolutely no text, no letters, no words, no captions, no numbers, no logos, no watermark, no typography of any kind.`.replace(/\s+/g, " ").trim();
 
   const image = await generateImage(imagePrompt);
   if (!image.data) {
@@ -1215,7 +1220,31 @@ async function generateThumbnailImage(body = {}) {
       note: image.warning || "Image generation is unavailable right now. Use the local canvas designer meanwhile.",
     };
   }
-  return { image, prompt: imagePrompt, note: "", provider: image.provider };
+  return { image, prompt: imagePrompt, note: "", provider: image.provider, scene };
+}
+
+// Converts an abstract video headline into one concrete, literal visual scene the
+// image model can actually draw (no text/title echoed back). Falls back to a simple
+// symbolic description if the text model is unavailable.
+async function describeThumbnailScene({ title, subtitle, style, palette, dna }) {
+  const fallback = { scene: `A striking, symbolic photoreal scene that visually represents the topic "${title}".` };
+  const prompt = `You write prompts for an AI image generator that creates YouTube thumbnail BACKGROUNDS.
+Turn the video below into ONE concrete, literal visual scene a text-to-image model can draw: name a real subject, setting, objects, action, and mood using concrete nouns.
+Hard rules:
+- Describe ONLY what is visually in the frame.
+- Do NOT include any text, words, letters, numbers, captions, or the video title itself.
+- Do NOT mention "thumbnail", "text overlay", or "headline".
+- Keep it to 1-2 vivid sentences.
+Return JSON only: { "scene": string }
+
+Video title: ${title}
+${subtitle ? `Subtitle: ${subtitle}` : ""}
+Desired mood/style: ${style}
+Color palette: ${palette}
+${dna?.visual ? `Creator's visual style to honor: ${dna.visual}` : ""}`;
+  const result = await callFeatherlessJson(prompt, fallback, { temperature: 0.8, maxOutputTokens: 220 });
+  const scene = (typeof result?.scene === "string" && result.scene.trim()) ? result.scene.trim() : fallback.scene;
+  return scene.slice(0, 600);
 }
 
 // Picks the image provider (default Pollinations, keyless) and falls back to the
@@ -1825,7 +1854,7 @@ function fallbackAdProject(body = {}) {
     sceneList: ["Problem", "Real use", "Proof", "Honest limitation", "CTA"],
     shotList: ["Creator close-up", "Product/action shot", "Result shot", "Caption overlay", "CTA end card"],
     storyboard: ["Hook frame", "Context frame", "Action frame", "Result frame", "CTA frame"],
-    voiceover: "Direct, specific, and non-hype.",
+    voiceover: `I wanted ${idea} to solve a real problem, not just look good on camera. Here is what it does, where it helps, and the honest reason I would use it.`,
     dialogue: ["I wanted this to solve a real problem, not just look good on camera."],
     musicMood: body.mood || "clean and focused",
     visualPrompts: [`Creator studio scene for ${idea}, premium but practical, no fake claims.`],

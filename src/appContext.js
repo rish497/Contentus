@@ -26,6 +26,7 @@ export const defaultState = {
   dna: null,
   ideas: [],
   scripts: [],
+  adProjects: [],
   thumbnails: [],
   voiceovers: [],
   trends: null,
