@@ -143,6 +143,11 @@ async function serveStatic(response, pathname) {
     return;
   }
 
+  if (!isPublicStaticPath(safePath)) {
+    sendJson(response, 404, { error: "Not found" });
+    return;
+  }
+
   try {
     const info = await stat(filePath);
     if (!info.isFile()) throw new Error("Not a file");
@@ -155,6 +160,10 @@ async function serveStatic(response, pathname) {
     });
     createReadStream(filePath).pipe(response);
   } catch {
+    if (path.extname(safePath)) {
+      sendJson(response, 404, { error: "Not found" });
+      return;
+    }
     const index = await readFile(path.join(__dirname, "index.html"));
     response.writeHead(200, {
       "Content-Type": "text/html; charset=utf-8",
@@ -164,6 +173,117 @@ async function serveStatic(response, pathname) {
     response.end(index);
   }
 }
+
+function isPublicStaticPath(rawPath = "") {
+  const normalized = (`/${rawPath}`.replace(/\\/g, "/")).replace(/\/+/g, "/");
+  const decoded = decodeURIComponent(normalized);
+  const segments = decoded.split("/").filter(Boolean);
+  if (segments.some((segment) => segment.startsWith("."))) return false;
+  if (segments.some((segment) => ["node_modules", "extension", "lagacy", "references"].includes(segment))) return false;
+  if (/^\/(app|login|features|workflow|chrome-helper)(\/|$)/.test(decoded)) return true;
+  if (segments[0] === "assets") return /\.(png|jpe?g|webp|svg)$/i.test(decoded);
+  if (segments[0] === "src") return segments.length === 2 && /\.js$/i.test(decoded);
+  return [
+    "/",
+    "/Landing Page.dc.html",
+    "/index.html",
+    "/app.js",
+    "/support.js",
+    "/styles.css",
+    "/contentus.jpg",
+  ].includes(decoded);
+}
+
+const extensionZipFiles = [
+  "manifest.json",
+  "popup.html",
+  "popup.js",
+  "sidepanel.html",
+  "sidepanel.js",
+  "background.js",
+  "content.js",
+  "extension.css",
+];
+
+async function buildExtensionZip() {
+  const entries = await Promise.all(extensionZipFiles.map(async (name) => ({
+    name,
+    data: await readFile(path.join(__dirname, "extension", name)),
+  })));
+  return createZip(entries);
+}
+
+function createZip(entries) {
+  const localParts = [];
+  const centralParts = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name.replace(/\\/g, "/"));
+    const data = Buffer.isBuffer(entry.data) ? entry.data : Buffer.from(entry.data);
+    const crc = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 6);
+    local.writeUInt16LE(0, 8);
+    local.writeUInt16LE(0, 10);
+    local.writeUInt16LE(0, 12);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    local.writeUInt16LE(0, 28);
+    localParts.push(local, name, data);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(0, 8);
+    central.writeUInt16LE(0, 10);
+    central.writeUInt16LE(0, 12);
+    central.writeUInt16LE(0, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt16LE(0, 30);
+    central.writeUInt16LE(0, 32);
+    central.writeUInt16LE(0, 34);
+    central.writeUInt16LE(0, 36);
+    central.writeUInt32LE(0, 38);
+    central.writeUInt32LE(offset, 42);
+    centralParts.push(central, name);
+    offset += local.length + name.length + data.length;
+  }
+  const centralSize = centralParts.reduce((total, part) => total + part.length, 0);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(centralSize, 12);
+  end.writeUInt32LE(offset, 16);
+  end.writeUInt16LE(0, 20);
+  return Buffer.concat([...localParts, ...centralParts, end]);
+}
+
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc = crc32Table[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+const crc32Table = Array.from({ length: 256 }, (_, index) => {
+  let c = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+  }
+  return c >>> 0;
+});
 
 async function handleApi(request, response, url) {
   if (request.method === "OPTIONS") {
@@ -290,6 +410,19 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/extension/download") {
+    const zip = await buildExtensionZip();
+    response.writeHead(200, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": 'attachment; filename="contentus-chrome-helper.zip"',
+      "Cache-Control": "no-cache",
+      ...corsHeaders(),
+      "X-Content-Type-Options": "nosniff",
+    });
+    response.end(zip);
+    return;
+  }
+
   const body = await readJsonBody(request);
 
   if (request.method === "GET" && url.pathname === "/api/calendar/events") {
@@ -349,6 +482,12 @@ async function handleApi(request, response, url) {
   if (request.method === "POST" && url.pathname === "/api/ai/thumbnail-copy") {
     const suggestions = await generateThumbnailCopy(body);
     sendJson(response, 200, { suggestions });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ai/extension-helper") {
+    const result = await generateExtensionHelper(body);
+    sendJson(response, 200, result);
     return;
   }
 
@@ -970,6 +1109,62 @@ Use very few words. No clickbait lies.
     throw new ApiError(502, "Thumbnail copy generation failed", "Featherless returned no thumbnail copy suggestions.");
   }
   return suggestions;
+}
+
+async function generateExtensionHelper(body = {}) {
+  const task = String(body.task || "analyze").slice(0, 80);
+  const context = body.context || {};
+  const prompt = `
+You are Contentus Chrome Helper. Help a creator use the current webpage as ethical inspiration, not copying. Return only JSON:
+{
+  "title": string,
+  "summary": string,
+  "sections": [{ "label": string, "text": string }],
+  "drafts": string[],
+  "authenticityScore": number | null,
+  "genericRisk": "Low" | "Medium" | "High",
+  "copyingWarning": string
+}
+
+Task: ${task}
+Notes from creator: ${String(body.notes || "").slice(0, 2000)}
+Current page context:
+${JSON.stringify({
+    title: context.title || "",
+    url: context.url || "",
+    platform: context.platform || "",
+    description: context.description || "",
+    selectedText: context.selection || "",
+    visibleText: String(context.visibleText || "").slice(0, 9000),
+  }, null, 2)}
+
+Task behavior:
+- analyze: summarize the page, title/hook/topic/audience angle, what works, what can improve, and how to make an original version.
+- titles: produce title ideas only in drafts.
+- description: produce platform-safe descriptions/captions in drafts.
+- mine: rewrite selected text into an original creator-owned angle, not a close paraphrase.
+- guard: score authenticity/generic risk and suggest a rewrite.
+- caption: produce TikTok, Instagram, YouTube, LinkedIn, and X/Twitter drafts.
+- followup: produce follow-up content ideas in drafts.
+- youtube-helper: analyze title, hook, thumbnail/text clues, likely audience, and original follow-up ideas.
+
+Rules: Never encourage plagiarism. If page context is thin, say what is missing. Do not claim private analytics. Keep output practical and specific.
+`;
+  const result = await callFeatherlessJson(prompt, { temperature: 0.45, maxOutputTokens: 1600 });
+  const sections = normalizeArray(result.sections).filter((section) => section?.label || section?.text);
+  const drafts = normalizeArray(result.drafts).filter(Boolean);
+  if (!sections.length && !drafts.length && !String(result.summary || "").trim()) {
+    throw new ApiError(502, "Extension helper failed", "Featherless returned no usable helper output.");
+  }
+  return {
+    title: result.title || "Contentus helper",
+    summary: result.summary || "",
+    sections,
+    drafts,
+    authenticityScore: result.authenticityScore ?? null,
+    genericRisk: result.genericRisk || "",
+    copyingWarning: result.copyingWarning || "Use this as inspiration, not copying.",
+  };
 }
 
 async function scoreAuthenticityWithAi(body = {}) {

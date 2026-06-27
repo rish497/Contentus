@@ -2181,10 +2181,10 @@ function calendarDayPopupV5(items, googleEvents) {
   const rows = entries.length
     ? entries.map((entry) => `
         <div class="day-timeline-row ${entry.kind === "google" ? "google" : ""}">
-          <div class="day-timeline-time">${entry.time ? escapeHtml(entry.time) + (entry.endTime ? `??{escapeHtml(entry.endTime)}` : "") : "All day"}</div>
+          <div class="day-timeline-time">${entry.time ? escapeHtml(entry.time) + (entry.endTime ? `-${escapeHtml(entry.endTime)}` : "") : "All day"}</div>
           <div class="day-timeline-body">
             <strong>${escapeHtml(entry.title)}</strong>
-            <small>${escapeHtml(entry.label)}${entry.status ? " 쨌 " + escapeHtml(entry.status) : ""}</small>
+            <small>${escapeHtml(entry.label)}${entry.status ? " - " + escapeHtml(entry.status) : ""}</small>
             ${entry.notes ? `<p>${escapeHtml(entry.notes)}</p>` : ""}
           </div>
         </div>`).join("")
@@ -2194,7 +2194,7 @@ function calendarDayPopupV5(items, googleEvents) {
       <div class="day-popup" role="dialog" aria-modal="true" data-stop="1">
         <header class="day-popup-head">
           <div><span class="section-kicker">Day timetable</span><h3>${escapeHtml(heading)}</h3></div>
-          <button class="icon-button" type="button" data-action="v4-close-day" aria-label="Close">??/button>
+          <button class="icon-button" type="button" data-action="v4-close-day" aria-label="Close">&times;</button>
         </header>
         <div class="day-timeline">${rows}</div>
       </div>
@@ -2217,7 +2217,8 @@ function extensionPageV4() {
           <h3>Load unpacked</h3>
           <div class="list-stack">
             ${insight("Open Chrome extensions", "Go to chrome://extensions and enable Developer mode.")}
-            ${insight("Load the folder", "Choose C:\\Users\\mitta\\Documents\\Contentus\\extension.")}
+            <a class="button primary full-width" href="/api/extension/download" download="contentus-chrome-helper.zip">Download Chrome Helper</a>
+            ${insight("Load the zip", "Unzip the download, choose Load unpacked, then select the unzipped folder.")}
             ${insight("Pin Contentus", "Open any YouTube video, article, or draft and click the extension.")}
           </div>
         </article>

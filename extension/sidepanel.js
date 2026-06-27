@@ -1,3 +1,5 @@
+const DEFAULT_API_BASE = "http://localhost:3000";
+
 const titleEl = document.querySelector("#side-title");
 const outputEl = document.querySelector("#side-output");
 
@@ -7,17 +9,16 @@ let context = {
   selection: "",
   visibleText: "",
   description: "",
+  platform: "Web",
 };
 
 document.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
   if (!button) return;
-  if (button.dataset.action === "refresh") return refresh();
-  if (button.dataset.action === "save") return save();
-  if (button.dataset.action === "titles") return renderTitles();
-  if (button.dataset.action === "description") return renderDescription();
-  if (button.dataset.action === "followup") return renderFollowup();
-  if (button.dataset.action === "mine") return renderMine();
+  const action = button.dataset.action;
+  if (action === "refresh") return refresh();
+  if (action === "save") return save(button);
+  return runAiAction(action, button);
 });
 
 refresh();
@@ -30,7 +31,7 @@ async function refresh() {
       target: { tabId: tab.id },
       func: () => ({
         selection: window.getSelection().toString(),
-        visibleText: document.body?.innerText?.replace(/\s+/g, " ").slice(0, 5000) || "",
+        visibleText: document.body?.innerText?.replace(/\s+/g, " ").slice(0, 7000) || "",
         description: document.querySelector("meta[name='description']")?.content || "",
       }),
     });
@@ -38,71 +39,118 @@ async function refresh() {
   } catch {
     page = {};
   }
+
+  const url = tab.url || "";
   context = {
     title: tab.title || "Untitled page",
-    url: tab.url || "",
+    url,
     selection: page.selection || "",
     visibleText: page.visibleText || "",
     description: page.description || "",
+    platform: detectPlatform(url),
   };
   titleEl.textContent = context.title;
   outputEl.innerHTML = `
     <article>
-      <strong>Title breakdown</strong>
-      <p>${context.title}</p>
-    </article>
-    <article>
-      <strong>Hook guess</strong>
-      <p>The page likely promises a useful outcome, strong curiosity gap, or recognizable problem.</p>
-    </article>
-    <article>
-      <strong>Thumbnail or opening angle</strong>
-      <p>Look for contrast: before/after, mistake/fix, chaos/system, or personal proof.</p>
-    </article>
-    <article>
-      <strong>Copying warning</strong>
-      <p>Use this as inspiration only. Build a version with your own story, audience, proof, and Creator DNA.</p>
+      <strong>${escapeHtml(context.platform)} context loaded</strong>
+      <p>${escapeHtml(context.title)}</p>
     </article>
   `;
 }
 
-async function save() {
-  const item = {
-    id: `insp-${Date.now()}`,
-    sourceTitle: context.title,
-    sourceUrl: context.url,
-    analysis: "Saved from side panel. Use as inspiration, not copying.",
-    createdAt: new Date().toISOString(),
-  };
-  const { savedInspiration = [] } = await chrome.storage.local.get("savedInspiration");
-  await chrome.storage.local.set({ savedInspiration: [item, ...savedInspiration].slice(0, 50) });
-  append("Saved as inspiration", "This page is now in local extension storage.");
+async function save(button) {
+  await withBusy(button, "Saving...", async () => {
+    const item = {
+      id: `insp-${Date.now()}`,
+      sourceTitle: context.title,
+      sourceUrl: context.url,
+      selectedText: context.selection,
+      platform: context.platform,
+      createdAt: new Date().toISOString(),
+    };
+    const { savedInspiration = [] } = await chrome.storage.local.get("savedInspiration");
+    await chrome.storage.local.set({ savedInspiration: [item, ...savedInspiration].slice(0, 50) });
+    await apiJson("/api/inspiration", { method: "POST", body: item, optional: true });
+    append("Saved as inspiration", "Saved. Use this as inspiration, not copying.");
+  });
 }
 
-function renderFollowup() {
-  append("Follow-up idea", "Make a version for your audience: test the idea with your own messy workflow, show proof, then explain what you would repeat or avoid.");
+async function runAiAction(task, button) {
+  await withBusy(button, "Asking AI...", async () => {
+    append("Contentus AI", "Thinking...");
+    const data = await apiJson("/api/ai/extension-helper", {
+      method: "POST",
+      body: { task, context },
+    });
+    appendHelperResult(data);
+  });
 }
 
-function renderMine() {
-  append("Make it mine", "Rewrite the core angle around your Creator DNA: honest experiment, quick proof, useful takeaway, and a conversational CTA.");
+async function apiJson(path, options = {}) {
+  const base = await getApiBase();
+  try {
+    const response = await fetch(`${base}${path}`, {
+      method: options.method || "GET",
+      headers: { "Content-Type": "application/json" },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!response.ok) throw new Error(data.message || data.error || `Contentus API failed with ${response.status}`);
+    return data;
+  } catch (error) {
+    if (options.optional) return null;
+    throw new Error(`Could not reach Contentus at ${base}. ${error.message}`);
+  }
 }
 
-function renderTitles() {
-  const subject = cleanSubject(context.selection || context.description || context.title);
-  append("Title suggestions", [
-    `I Tested ${subject} So You Do Not Have To`,
-    `The ${subject} Mistake Nobody Explains`,
-    `Before You Copy ${subject}, Watch This`,
-  ].join("\n"));
+async function getApiBase() {
+  const stored = await chrome.storage.local.get({ contentusApiBase: DEFAULT_API_BASE });
+  return String(stored.contentusApiBase || DEFAULT_API_BASE).replace(/\/+$/, "");
 }
 
-function renderDescription() {
-  const subject = cleanSubject(context.selection || context.description || context.title);
-  append("Description draft", `I break down ${subject} through my own creator workflow, with real proof, honest limitations, and a version my audience can actually use.\n\nUse this as inspiration, not copying.`);
+async function withBusy(button, label, task) {
+  const oldText = button.textContent;
+  button.disabled = true;
+  button.textContent = label;
+  try {
+    await task();
+  } catch (error) {
+    append("Contentus AI error", error.message || "The helper failed.");
+  } finally {
+    button.disabled = false;
+    button.textContent = oldText;
+  }
+}
+
+function appendHelperResult(data = {}) {
+  const pieces = [];
+  if (data.summary) pieces.push(data.summary);
+  for (const section of data.sections || []) {
+    pieces.push(`${section.label || "Insight"}: ${section.text || ""}`);
+  }
+  if (data.drafts?.length) {
+    pieces.push(data.drafts.map((item, index) => `${index + 1}. ${item}`).join("\n"));
+  }
+  if (data.authenticityScore !== null && data.authenticityScore !== undefined) {
+    pieces.push(`Authenticity score: ${data.authenticityScore}`);
+  }
+  if (data.genericRisk) pieces.push(`Generic risk: ${data.genericRisk}`);
+  if (data.copyingWarning) pieces.push(data.copyingWarning);
+  append(data.title || "Contentus AI", pieces.filter(Boolean).join("\n\n") || "No usable AI output returned.");
 }
 
 function append(title, text) {
   outputEl.insertAdjacentHTML("afterbegin", `<article><strong>${escapeHtml(title)}</strong><p>${escapeHtml(text)}</p></article>`);
+}
+
+function detectPlatform(url = "") {
+  if (url.includes("youtube.com")) return "YouTube";
+  if (url.includes("tiktok.com")) return "TikTok";
+  if (url.includes("instagram.com")) return "Instagram";
+  if (url.includes("twitter.com") || url.includes("x.com")) return "X/Twitter";
+  if (url.includes("docs.google.com")) return "Google Docs";
+  return "Web";
 }
 
 function escapeHtml(value = "") {
@@ -110,9 +158,4 @@ function escapeHtml(value = "") {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
-}
-
-function cleanSubject(text = "") {
-  const clean = text.replace(/\s+/g, " ").replace(/[^\w\s-]/g, "").trim();
-  return clean.split(/\s+/).filter(Boolean).slice(0, 7).join(" ") || "This Idea";
 }

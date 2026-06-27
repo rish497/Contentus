@@ -22,9 +22,29 @@ services:
         sync: false
       - key: FEATHERLESS_MODEL
         value: meta-llama/Meta-Llama-3.1-8B-Instruct
+      - key: FEATHERLESS_VISION_MODEL
+        value: Qwen/Qwen2.5-VL-72B-Instruct
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: GEMINI_IMAGE_MODEL
         value: gemini-2.0-flash-preview-image-generation
+      - key: IMAGE_PROVIDER
+        value: pollinations
+      - key: YOUTUBE_DATA_API_KEY
+        sync: false
+      - key: FIREBASE_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_MODEL
+        value: eleven_multilingual_v2
+      - key: ELEVENLABS_VOICE_ID
+        value: 21m00Tcm4TlvDq8ikWAM
+      - key: ELEVENLABS_MAX_CHARS
+        value: 5000
       - key: SKIP_INSTALL_DEPS
         value: true

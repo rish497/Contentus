@@ -1,7 +1,10 @@
+const DEFAULT_API_BASE = "http://localhost:3000";
+
 const titleEl = document.querySelector("#page-title");
 const selectionEl = document.querySelector("#selection-preview");
 const notesEl = document.querySelector("#notes");
 const resultEl = document.querySelector("#result");
+const apiBaseEl = document.querySelector("#api-base");
 
 let pageContext = {
   title: "Unknown page",
@@ -9,6 +12,7 @@ let pageContext = {
   selection: "",
   visibleText: "",
   description: "",
+  platform: "Web",
 };
 
 document.addEventListener("click", async (event) => {
@@ -16,19 +20,16 @@ document.addEventListener("click", async (event) => {
   if (!button) return;
 
   const action = button.dataset.action;
-  if (action === "save") return saveIdea();
-  if (action === "analyze") return showResult(analyzeContent(pageContext));
-  if (action === "titles") return showResult(suggestTitles(pageContext));
-  if (action === "description") return showResult(generateDescription(pageContext));
-  if (action === "mine") return showResult(makeItMine(pageContext.selection || pageContext.title));
-  if (action === "guard") return showResult(checkAuthenticity(pageContext.selection || pageContext.title));
-  if (action === "caption") return showResult(generateCaptions(pageContext.selection || pageContext.title));
+  if (action === "save") return saveIdea(button);
   if (action === "sidepanel") return openSidePanel();
+  if (action === "save-api-base") return saveApiBase(button);
+  return runAiAction(action, button);
 });
 
 init();
 
 async function init() {
+  apiBaseEl.value = await getApiBase();
   pageContext = await getPageContext();
   titleEl.textContent = pageContext.title;
   selectionEl.textContent = pageContext.selection
@@ -36,52 +37,75 @@ async function init() {
     : "Highlight text on the page to use Make It Mine or Authenticity Check.";
 }
 
+async function saveApiBase(button) {
+  await withBusy(button, "Saving...", async () => {
+    const nextBase = String(apiBaseEl.value || DEFAULT_API_BASE).trim().replace(/\/+$/, "");
+    if (!/^https?:\/\/.+/i.test(nextBase)) throw new Error("Enter a valid Contentus URL, like https://your-app.onrender.com");
+    await chrome.storage.local.set({ contentusApiBase: nextBase });
+    showResult(`Contentus app URL saved:\n${nextBase}`);
+  });
+}
+
 async function getPageContext() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  let selection = "";
-  let visibleText = "";
-  let description = "";
-
+  let page = {};
   try {
     const [result] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => ({
         selection: window.getSelection().toString(),
-        visibleText: document.body?.innerText?.replace(/\s+/g, " ").slice(0, 5000) || "",
+        visibleText: document.body?.innerText?.replace(/\s+/g, " ").slice(0, 7000) || "",
         description: document.querySelector("meta[name='description']")?.content || "",
       }),
     });
-    selection = result.result?.selection || "";
-    visibleText = result.result?.visibleText || "";
-    description = result.result?.description || "";
+    page = result.result || {};
   } catch {
-    selection = "";
+    page = {};
   }
 
+  const url = tab.url || "";
   return {
     title: tab.title || "Untitled page",
-    url: tab.url || "",
-    selection,
-    visibleText,
-    description,
+    url,
+    selection: page.selection || "",
+    visibleText: page.visibleText || "",
+    description: page.description || "",
+    platform: detectPlatform(url),
   };
 }
 
-async function saveIdea() {
-  const item = {
-    id: `insp-${Date.now()}`,
-    sourceTitle: pageContext.title,
-    sourceUrl: pageContext.url,
-    selectedText: pageContext.selection,
-    notes: notesEl.value,
-    platform: detectPlatform(pageContext.url),
-    analysis: "Use this as inspiration, not copying. Rebuild the angle around your Creator DNA.",
-    createdAt: new Date().toISOString(),
-  };
+async function runAiAction(task, button) {
+  await withBusy(button, "Asking AI...", async () => {
+    showResult("Asking Contentus AI...");
+    const data = await apiJson("/api/ai/extension-helper", {
+      method: "POST",
+      body: { task, context: pageContext, notes: notesEl.value },
+    });
+    showResult(formatHelperResult(data));
+  });
+}
 
-  const { savedInspiration = [] } = await chrome.storage.local.get("savedInspiration");
-  await chrome.storage.local.set({ savedInspiration: [item, ...savedInspiration].slice(0, 50) });
-  showResult(`Saved to Contentus Idea Inbox.\n\n${item.analysis}`);
+async function saveIdea(button) {
+  await withBusy(button, "Saving...", async () => {
+    const item = {
+      id: `insp-${Date.now()}`,
+      sourceTitle: pageContext.title,
+      sourceUrl: pageContext.url,
+      selectedText: pageContext.selection,
+      notes: notesEl.value,
+      platform: pageContext.platform,
+      createdAt: new Date().toISOString(),
+    };
+
+    const { savedInspiration = [] } = await chrome.storage.local.get("savedInspiration");
+    await chrome.storage.local.set({ savedInspiration: [item, ...savedInspiration].slice(0, 50) });
+    await apiJson("/api/inspiration", {
+      method: "POST",
+      body: item,
+      optional: true,
+    });
+    showResult("Saved to Contentus.\n\nUse this as inspiration, not copying.");
+  });
 }
 
 async function openSidePanel() {
@@ -93,82 +117,61 @@ async function openSidePanel() {
   }
 }
 
-function analyzeContent(context) {
-  const subject = context.selection || context.description || context.title;
-  return [
-    `Summary: ${context.title}`,
-    `Hook analysis: ${hookGuess(subject)}`,
-    `Platform: ${detectPlatform(context.url)}`,
-    "Audience angle: Turn the topic into a version for your own audience, proof, and niche.",
-    "What works: Specific promise, easy entry point, and clear emotional angle.",
-    "Originality warning: Use this as inspiration, not copying.",
-  ].join("\n\n");
+async function apiJson(path, options = {}) {
+  const base = await getApiBase();
+  try {
+    const response = await fetch(`${base}${path}`, {
+      method: options.method || "GET",
+      headers: { "Content-Type": "application/json" },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!response.ok) {
+      throw new Error(data.message || data.error || `Contentus API failed with ${response.status}`);
+    }
+    return data;
+  } catch (error) {
+    if (options.optional) return null;
+    throw new Error(`Could not reach Contentus at ${base}. ${error.message}`);
+  }
 }
 
-function suggestTitles(context) {
-  const subject = cleanSubject(context.selection || context.description || context.title);
-  return [
-    "Title suggestions:",
-    `1. I Tested ${subject} So You Do Not Have To`,
-    `2. The ${subject} Mistake Nobody Explains`,
-    `3. I Tried ${subject} With My Real Workflow`,
-    `4. Before You Copy ${subject}, Watch This`,
-    "",
-    "Use this as inspiration, not copying. Add your own proof or story before publishing.",
-  ].join("\n");
+async function getApiBase() {
+  const stored = await chrome.storage.local.get({ contentusApiBase: DEFAULT_API_BASE });
+  return String(stored.contentusApiBase || DEFAULT_API_BASE).replace(/\/+$/, "");
 }
 
-function generateDescription(context) {
-  const subject = cleanSubject(context.selection || context.description || context.title);
-  return [
-    "YouTube description draft:",
-    `In this video, I break down ${subject} through my own creator workflow instead of copying someone else's angle. I show what works, what I would change, and how to turn the idea into something useful for my audience.`,
-    "",
-    "CTA: Comment with the part you want me to test next.",
-    "Disclosure: Brainstormed with AI support; final story and edits should be yours.",
-  ].join("\n");
+async function withBusy(button, label, task) {
+  const oldText = button.textContent;
+  button.disabled = true;
+  button.textContent = label;
+  try {
+    await task();
+  } catch (error) {
+    showResult(error.message || "Contentus AI failed.");
+  } finally {
+    button.disabled = false;
+    button.textContent = oldText;
+  }
 }
 
-function makeItMine(text) {
-  return [
-    "Rewritten in Creator DNA voice:",
-    `I tried this in my actual workflow, and the useful part was not the shiny claim. It was what it exposed about my process: ${text.slice(0, 120)}`,
-    "Authenticity score: 88",
-    "Generic risk: Low",
-    "CTA: Want me to test this with my own audience next?",
-  ].join("\n\n");
-}
-
-function checkAuthenticity(text) {
-  const generic = /unlock|revolutionary|effortless|ultimate|guarantee/i.test(text);
-  return [
-    `Authenticity Score: ${generic ? 54 : 87}`,
-    `What sounds like you: ${generic ? "Not enough yet." : "Specific, honest, and creator-led."}`,
-    `What sounds generic: ${generic ? "Inflated promise language." : "Low generic risk."}`,
-    "Suggested rewrite: Add one personal detail, remove broad claims, and keep the CTA conversational.",
-  ].join("\n\n");
-}
-
-function generateCaptions(text) {
-  return [
-    `TikTok: POV: this idea looked simple until my actual workflow exposed the problem.`,
-    `Instagram: I am using this as inspiration, not copying. Here is the version that fits my audience: ${text.slice(0, 80)}`,
-    "YouTube title: I Tested This Creator Idea So You Do Not Have To",
-    "LinkedIn: The best creator AI workflow protects voice first and output second.",
-    "X thread: 1/ Fast content is useful only if it still sounds like you...",
-  ].join("\n\n");
-}
-
-function cleanSubject(text = "") {
-  const clean = text.replace(/\s+/g, " ").replace(/[^\w\s-]/g, "").trim();
-  const words = clean.split(/\s+/).filter(Boolean).slice(0, 7).join(" ");
-  return words || "This Idea";
-}
-
-function hookGuess(text = "") {
-  if (/\?|how|why|mistake|secret|best|worst/i.test(text)) return "The page uses curiosity or a problem-led angle.";
-  if (/review|tested|try|experiment/i.test(text)) return "The page likely works because it promises proof through a test.";
-  return "The page can be reframed as a personal experiment, a useful breakdown, or a before/after.";
+function formatHelperResult(data = {}) {
+  const lines = [];
+  if (data.title) lines.push(data.title);
+  if (data.summary) lines.push(data.summary);
+  for (const section of data.sections || []) {
+    lines.push(`${section.label || "Insight"}:\n${section.text || ""}`);
+  }
+  if (data.drafts?.length) {
+    lines.push(`Drafts:\n${data.drafts.map((item, index) => `${index + 1}. ${item}`).join("\n")}`);
+  }
+  if (data.authenticityScore !== null && data.authenticityScore !== undefined) {
+    lines.push(`Authenticity score: ${data.authenticityScore}`);
+  }
+  if (data.genericRisk) lines.push(`Generic risk: ${data.genericRisk}`);
+  if (data.copyingWarning) lines.push(data.copyingWarning);
+  return lines.filter(Boolean).join("\n\n") || "Contentus AI returned no usable text.";
 }
 
 function detectPlatform(url = "") {

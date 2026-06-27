@@ -32,12 +32,18 @@
       <label for="notes">Notes</label>
       <textarea id="notes" rows="3" placeholder="Why is this useful inspiration?"></textarea>
 
+      <label for="api-base">Contentus app URL</label>
+      <input id="api-base" type="url" placeholder="http://localhost:3000">
+      <button data-action="save-api-base">Save app URL</button>
+
       <div class="button-grid">
         <button data-action="save">Save to Contentus</button>
+        <button data-action="analyze">Analyze Content</button>
         <button data-action="titles">Suggest Titles</button>
         <button data-action="description">Description</button>
         <button data-action="mine">Make It Mine</button>
         <button data-action="guard">Check Authenticity</button>
+        <button data-action="caption">Captions</button>
         <button data-action="sidepanel">Open Side Panel</button>
       </div>
 
